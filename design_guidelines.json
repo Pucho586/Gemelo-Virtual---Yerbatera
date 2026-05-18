@@ -1,0 +1,148 @@
+{
+  "theme": "dark",
+  "archetype": "Archetype 2 (Performance Pro / Tactical Control Room) combined with Archetype 1 (Organic Earth tones for Yerba Mate context)",
+  "color_palette": {
+    "background_base": "#0A0C0B",
+    "surface": "#121513",
+    "surface_hover": "#1A1E1C",
+    "border": "#232A26",
+    "text_primary": "#F8FAFC",
+    "text_secondary": "#9CA3AF",
+    "text_tertiary": "#6B7280",
+    "primary": "#4ADE80",
+    "primary_hover": "#22C55E",
+    "ai_accent": "#FCD34D",
+    "status_online": "#4ADE80",
+    "status_offline": "#EF4444",
+    "status_warning": "#F59E0B",
+    "chart_temp": "#FCA5A5",
+    "chart_humidity": "#93C5FD",
+    "chart_co2": "#86EFAC",
+    "chart_rpm": "#D8B4FE",
+    "chart_ambient": "#FCD34D"
+  },
+  "typography": {
+    "headings": {
+      "family": "IBM Plex Sans, sans-serif",
+      "h1": "text-2xl sm:text-3xl font-semibold tracking-tight text-slate-50",
+      "h2": "text-xl sm:text-2xl font-medium tracking-tight text-slate-50",
+      "h3": "text-lg font-medium tracking-tight text-slate-200",
+      "h4": "text-sm font-semibold tracking-wide text-slate-400 uppercase"
+    },
+    "body": {
+      "family": "Inter, sans-serif",
+      "base": "text-sm text-slate-400 leading-relaxed",
+      "small": "text-xs text-slate-500"
+    },
+    "telemetry": {
+      "family": "JetBrains Mono, monospace",
+      "large": "text-3xl sm:text-4xl font-light tracking-tighter text-slate-50",
+      "medium": "text-xl sm:text-2xl font-normal tracking-tight text-slate-200",
+      "small": "text-xs font-medium text-slate-400"
+    },
+    "instructions": "Never use Inter for headings. Use IBM Plex Sans for all structural text and JetBrains Mono for all numbers, metrics, and KPI values."
+  },
+  "spacing_and_layout": {
+    "grid_strategy": "Mode B: The 'Control Room' Grid",
+    "container": "w-full max-w-[1920px] mx-auto p-4 md:p-6 lg:p-8",
+    "dashboard_grid": "grid grid-cols-1 md:grid-cols-4 lg:grid-cols-6 xl:grid-cols-12 gap-1 bg-border/40 p-[1px] rounded-sm",
+    "widget_container": "bg-surface h-full w-full",
+    "inner_padding": "p-4 sm:p-6",
+    "instructions": "Use a hairline grid layout. Wrap the main dashboard in a container with a subtle background color (bg-border) and gap-px or gap-1. Make all widget children have bg-surface. This creates a highly technical, border-collapse 'exposed skeleton' SCADA look. Eliminate standard card gaps."
+  },
+  "surface_strategy": {
+    "style": "Grid Borders (The 'Technical' Look) + Flat Geometry",
+    "radius": "rounded-none",
+    "shadows": "shadow-none",
+    "borders": "border-none (use the grid background for hairline borders)",
+    "glassmorphism": "Avoid completely. Use flat matte backgrounds to prevent visual refraction of industrial data."
+  },
+  "components": {
+    "cards": {
+      "style": "Flat, zero radius, no shadow. Relies on layout grid for borders. Inner padding p-4 or p-6."
+    },
+    "buttons": {
+      "primary": "bg-slate-50 text-slate-900 rounded-sm hover:bg-slate-200 px-4 py-2 font-medium transition-colors",
+      "secondary": "border border-border bg-transparent text-slate-300 hover:bg-surface-hover hover:text-white rounded-sm px-4 py-2 font-medium transition-colors",
+      "ai_action": "bg-amber-300/10 text-amber-300 border border-amber-300/30 hover:bg-amber-300/20 rounded-sm px-4 py-2 font-medium"
+    },
+    "tabs": {
+      "style": "Shadcn Tabs, but remove all rounded corners (rounded-none). Active tab gets a stark white or green bottom border, inactive tabs remain muted grey. High contrast."
+    },
+    "badges": {
+      "online": "bg-green-500/10 text-green-400 border border-green-500/20 px-2 py-0.5 text-xs font-mono",
+      "offline": "bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 text-xs font-mono",
+      "warning": "bg-amber-500/10 text-amber-400 border border-amber-500/20 px-2 py-0.5 text-xs font-mono"
+    },
+    "gauges": {
+      "style": "Minimalist arc with a thick stroke. Background track in #232A26. Value text in the center using JetBrains Mono."
+    },
+    "ai_assistant_panel": {
+      "style": "Fixed floating panel or collapsible right sidebar. Dark amber/yellow subtle tint for AI-generated text. Use the provided yerba_mate_texture as an ultra-low opacity (5%) background image in this panel to give it depth. Absolutely no purple or generic AI gradients."
+    }
+  },
+  "chart_styling": {
+    "library": "Recharts",
+    "grid": {
+      "stroke": "#232A26",
+      "strokeDasharray": "3 3",
+      "vertical": false
+    },
+    "axis": {
+      "tick": {
+        "fill": "#6B7280",
+        "fontSize": 11,
+        "fontFamily": "JetBrains Mono"
+      },
+      "axisLine": false,
+      "tickLine": false
+    },
+    "lines": {
+      "strokeWidth": 2,
+      "type": "monotone",
+      "dot": false
+    },
+    "tooltip": {
+      "contentStyle": {
+        "backgroundColor": "#0A0C0B",
+        "border": "1px solid #232A26",
+        "borderRadius": "0px",
+        "fontFamily": "JetBrains Mono",
+        "fontSize": "12px",
+        "color": "#F8FAFC"
+      }
+    }
+  },
+  "icons_and_assets": {
+    "library": "@phosphor-icons/react",
+    "style": "Weight: 'regular' or 'light'. Strict geometric icons for SCADA.",
+    "installation": "yarn add @phosphor-icons/react"
+  },
+  "motion_and_interactions": {
+    "animations": "Minimal. Use rapid transitions (100ms) for hover states. No bouncy physics. State changes should feel immediate and reliable, like a hardware interface.",
+    "hover": "All interactive elements must lighten background on hover and increase text contrast."
+  },
+  "media_urls": {
+    "backgrounds": [
+      {
+        "url": "https://static.prod-images.emergentagent.com/jobs/a17b3c5a-46e7-43b8-b1a4-84c688905c80/images/3d78791b68be907a7d44886e60440962e1b606c6d337a5a4a3b53d84baaa4d79.png",
+        "category": "ai_panel_background",
+        "description": "Abstract macro photography of dried yerba mate leaves in dark cinematic lighting. Use with very low opacity (e.g., 5-10%) as a subtle background texture in the AI Assistant sidebar or overall dashboard wrapper to add industrial/organic depth without distraction."
+      }
+    ]
+  },
+  "testing": {
+    "attributes": "All interactive elements MUST include data-testid attributes (e.g., data-testid='modbus-status-badge', data-testid='export-csv-button')."
+  },
+  "instructions_to_main_agent": [
+    "You are building a React + FastAPI digital twin dashboard for an industrial yerba mate production facility.",
+    "Use standard JavaScript (.js/.jsx), NOT TypeScript.",
+    "Enforce the 'Tactical Control Room' look. The UI should be dense, grid-based, and highly structured. Avoid soft shadows, rounded corners, or playful aesthetics.",
+    "Use Recharts for all data visualization. Follow the styling in `chart_styling` exactly. For the Zapecado chart, implement a ReferenceLine at 600°C for the ceiling limit.",
+    "For the 4 Maduración chambers, use a tight CSS Grid to display the 4 identical cards, ensuring high density without scrolling.",
+    "Integrate the 'yerba_mate_texture' background image selectively, such as in the AI panel, with opacity-5 or blend-overlay to subtly hint at the agricultural context.",
+    "Replace the 'purple AI' paradigm. Gemini 3 Flash UI elements should use the amber/yellow accents specified to convey 'insight' rather than 'magic'.",
+    "Ensure the layout accommodates live data streams and the Modbus/MQTT/OPC UA connection status indicators visibly in the global header.",
+    "All components should be pure HTML/Tailwind with Shadcn used only for complex interactives (Tabs, Dropdowns, Dialogs). Customize Shadcn to remove rounded corners (rounded-none)."
+  ]
+}
