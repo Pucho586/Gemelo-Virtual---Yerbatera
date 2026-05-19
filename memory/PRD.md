@@ -48,6 +48,19 @@ React (frontend + auth JWT) ─┬─► FastAPI /api/* (REST + WebSocket)
 ### v2.2 — Industria 4.0 (iter 4) — 66/66 tests
 - Clientes Modbus + OPC UA + MQTT subscriber, modo Shadow, drift sim vs PLC, calibración por CSV, audit trail
 
+### v2.3.1 — Chips de madera + parámetros editables (iter 6) — 8/8 + 22/22 regresión ★
+- Migración completa **gas natural → chips de madera** (combustible para zapecado)
+- Fix crítico: `operations.py::energy_cost_ars()` ya no crashea con AttributeError
+- Nuevo parámetro editable: **PCI (poder calorífico inferior) de los chips** en MJ/kg (default 17, rango 5-25). Escala el consumo automáticamente.
+- Editables desde UI por admin:
+  - Precios: kWh, kg chips, kg yerba venta
+  - Turnos: cantidad por día + horas por turno → calcula horas planificadas
+  - Umbrales de mantenimiento por (componente, acción)
+- Endpoints nuevos: `POST /api/ops/shifts`, `POST /api/maintenance/thresholds`
+- `POST /api/energy/prices` extendido con `chip_calorific_mj_kg`
+- PDFs mensuales ya muestran "Chips de madera" textual
+- Documentación generada: `/app/docs/manual_operaciones.md` + `/app/docs/manual_tecnico.md`
+
 ### v2.3 — Operaciones (iter 5) — 89/89 tests ★
 - **Alarmas ISA-18.2**: 7 reglas default + custom, 4 prioridades, ACK persistente, RTN-with/without-ACK, restore desde DB tras reinicio
 - **OEE**: Disponibilidad × Rendimiento × Calidad con ventana móvil
