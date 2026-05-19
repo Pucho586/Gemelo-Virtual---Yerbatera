@@ -652,8 +652,17 @@ class AlarmRuleBody(BaseModel):
 
 class PricesBody(BaseModel):
     kwh_ars: Optional[float] = None
-    m3_gas_ars: Optional[float] = None
+    kg_chips_ars: Optional[float] = None
     kg_yerba_venta_ars: Optional[float] = None
+
+
+class ShiftsBody(BaseModel):
+    shifts_per_day: Optional[int] = None
+    hours_per_shift: Optional[float] = None
+
+
+class ThresholdsBody(BaseModel):
+    thresholds: Dict[str, Dict[str, float]]
 
 
 class MaintAckBody(BaseModel):
@@ -724,7 +733,7 @@ async def get_energy():
     return {
         "kwh_by_component": dict(ops_service.kwh_accum),
         "total_kwh": ops_service.total_kwh(),
-        "gas_m3": ops_service.gas_m3_accum,
+        "chips_kg": ops_service.chips_kg_accum,
         "prices": dict(ops_service.prices),
         "energy_cost_ars": ops_service.energy_cost_ars(),
         "kg_produced": ops_service.kg_produced,
@@ -733,6 +742,9 @@ async def get_energy():
         "cost_per_kg_ars": ops_service.cost_per_kg_ars(),
         "margin_per_kg_ars": ops_service.margin_per_kg_ars(),
         "runtime_hours": dict(ops_service.runtime_hours),
+        "shifts_per_day": ops_service.shifts_per_day,
+        "hours_per_shift": ops_service.hours_per_shift,
+        "planned_hours_per_day": ops_service.planned_hours_per_day,
     }
 
 
@@ -741,6 +753,24 @@ async def set_prices(body: PricesBody, user=Depends(admin_only)):
     ops_service.update_prices(body.model_dump(exclude_none=True))
     await ops_service.save()
     return ops_service.prices
+
+
+@api.post("/ops/shifts")
+async def set_shifts(body: ShiftsBody, user=Depends(admin_only)):
+    ops_service.update_shifts(**body.model_dump(exclude_none=True))
+    await ops_service.save()
+    return {
+        "shifts_per_day": ops_service.shifts_per_day,
+        "hours_per_shift": ops_service.hours_per_shift,
+        "planned_hours_per_day": ops_service.planned_hours_per_day,
+    }
+
+
+@api.post("/maintenance/thresholds")
+async def set_thresholds(body: ThresholdsBody, user=Depends(admin_only)):
+    ops_service.update_thresholds(body.thresholds)
+    await ops_service.save()
+    return ops_service.thresholds
 
 
 @api.post("/ops/reset")
@@ -768,8 +798,8 @@ async def report_monthly(user=Depends(current_user_dep)):
         "kwh_by_component": dict(ops_service.kwh_accum),
         "runtime_hours": dict(ops_service.runtime_hours),
         "kwh_price": ops_service.prices["kwh_ars"],
-        "gas_m3": ops_service.gas_m3_accum,
-        "gas_cost_ars": ops_service.gas_m3_accum * ops_service.prices["m3_gas_ars"],
+        "chips_kg": ops_service.chips_kg_accum,
+        "chips_cost_ars": ops_service.chips_kg_accum * ops_service.prices["kg_chips_ars"],
         "maintenance": ops_service.maintenance_status(),
     }
     path = build_monthly_report(data)

@@ -20,8 +20,14 @@ def now_iso() -> str:
 # -------------- Defaults --------------
 DEFAULT_PRICES = {
     "kwh_ars": 120.0,
-    "m3_gas_ars": 280.0,
+    "kg_chips_ars": 95.0,           # Chips de madera (combustible para zapecado)
     "kg_yerba_venta_ars": 3500.0,
+}
+
+# Configuración de turnos (cantidad y duración) para calcular tiempo planificado
+DEFAULT_SHIFTS = {
+    "shifts_per_day": 3,
+    "hours_per_shift": 8.0,
 }
 
 # Potencia nominal estimada de cada componente (kW)
@@ -55,32 +61,44 @@ class OperationsService:
         # Estado en memoria (se persiste cada N segundos)
         self.runtime_hours: Dict[str, float] = {k: 0.0 for k in COMPONENT_POWER_KW}
         self.kwh_accum: Dict[str, float] = {k: 0.0 for k in COMPONENT_POWER_KW}
-        self.gas_m3_accum: float = 0.0
-        self.kg_produced: float = 0.0  # total acumulado (vía batches al cerrar)
+        self.chips_kg_accum: float = 0.0  # Chips de madera consumidos (kg)
+        self.kg_produced: float = 0.0
         self.kg_input: float = 0.0
         self.last_tick: float = 0.0
         self.prices: Dict[str, float] = dict(DEFAULT_PRICES)
         self.thresholds: Dict[str, Dict[str, float]] = {k: dict(v) for k, v in DEFAULT_MAINT_THRESHOLDS.items()}
-        self.maint_acks: Dict[str, Dict[str, str]] = {}  # component → action → iso ts (último service)
-        # Tiempo planificado por día (h) — 3 turnos x 8h = 24
-        self.planned_hours_per_day: float = 24.0
+        self.maint_acks: Dict[str, Dict[str, str]] = {}
+        # Configuración de turnos
+        self.shifts_per_day: int = DEFAULT_SHIFTS["shifts_per_day"]
+        self.hours_per_shift: float = DEFAULT_SHIFTS["hours_per_shift"]
 
     async def ensure_indexes(self):
         await self.db.ops_state.create_index("id", unique=True)
         await self.db.maint_log.create_index([("ts", -1)])
+
+    @property
+    def planned_hours_per_day(self) -> float:
+        return float(self.shifts_per_day) * float(self.hours_per_shift)
 
     async def load(self):
         doc = await self.db.ops_state.find_one({"id": "singleton"}, {"_id": 0})
         if doc:
             self.runtime_hours.update(doc.get("runtime_hours", {}))
             self.kwh_accum.update(doc.get("kwh_accum", {}))
-            self.gas_m3_accum = float(doc.get("gas_m3_accum", 0.0))
+            # Compat retro: gas_m3_accum → chips_kg_accum
+            self.chips_kg_accum = float(doc.get("chips_kg_accum", doc.get("gas_m3_accum", 0.0)))
             self.kg_produced = float(doc.get("kg_produced", 0.0))
             self.kg_input = float(doc.get("kg_input", 0.0))
-            self.prices = doc.get("prices", DEFAULT_PRICES)
+            # Migrar precios viejos
+            old_prices = doc.get("prices", {}) or {}
+            self.prices = {**DEFAULT_PRICES, **{k: v for k, v in old_prices.items() if k in DEFAULT_PRICES}}
+            if "m3_gas_ars" in old_prices and "kg_chips_ars" not in old_prices:
+                # Si venía precio gas, lo mapeamos como chips (orden de magnitud distinto, queda default)
+                pass
             self.thresholds = doc.get("thresholds", self.thresholds)
             self.maint_acks = doc.get("maint_acks", {})
-            self.planned_hours_per_day = float(doc.get("planned_hours_per_day", 24.0))
+            self.shifts_per_day = int(doc.get("shifts_per_day", DEFAULT_SHIFTS["shifts_per_day"]))
+            self.hours_per_shift = float(doc.get("hours_per_shift", DEFAULT_SHIFTS["hours_per_shift"]))
 
     async def save(self):
         await self.db.ops_state.replace_one(
@@ -89,38 +107,37 @@ class OperationsService:
                 "id": "singleton",
                 "runtime_hours": self.runtime_hours,
                 "kwh_accum": self.kwh_accum,
-                "gas_m3_accum": self.gas_m3_accum,
+                "chips_kg_accum": self.chips_kg_accum,
                 "kg_produced": self.kg_produced,
                 "kg_input": self.kg_input,
                 "prices": self.prices,
                 "thresholds": self.thresholds,
                 "maint_acks": self.maint_acks,
-                "planned_hours_per_day": self.planned_hours_per_day,
+                "shifts_per_day": self.shifts_per_day,
+                "hours_per_shift": self.hours_per_shift,
                 "updated_at": now_iso(),
             },
             upsert=True,
         )
 
-    # -------- Tick: acumula horas + kWh + gas según estado del simulador --------
+    # -------- Tick: acumula horas + kWh + chips de madera según estado del simulador --------
     def tick(self, state: Dict[str, Any], dt_sim_seconds: float):
-        """Acumula contadores. dt_sim_seconds = segundos simulados transcurridos (afectado por aceleración)."""
+        """Acumula contadores. dt_sim_seconds = segundos simulados transcurridos."""
         dt_h = dt_sim_seconds / 3600.0
         if dt_h <= 0:
             return
-        # Componentes y su estado on/off
         z = state.get("zapecado", {})
         s = state.get("secado", {})
         c = state.get("canchado", {})
-        # Si hay alimentación, el tambor está corriendo; sino, queda 30% encendido (mantenimiento térmico)
         if z.get("estado_alimentacion"):
             self.runtime_hours["tambor_zapecado"] += dt_h
             self.kwh_accum["tambor_zapecado"] += COMPONENT_POWER_KW["tambor_zapecado"] * dt_h
-            # gas: proporcional al delta temp respecto ambiente
+            # Chips de madera (combustible): proporcional al delta temp respecto ambiente.
+            # Estimación: 1.8 kg/h por cada 100°C arriba del ambiente (poder calorífico ~17 MJ/kg).
             amb = state.get("ambient", {}).get("temp", 25)
             t = z.get("temperatura", 0)
-            # ~0.6 m3/h por cada 100°C arriba del ambiente (estimación)
-            gas_rate = max(0.0, (t - amb) / 100.0 * 0.6)
-            self.gas_m3_accum += gas_rate * dt_h
+            chips_rate = max(0.0, (t - amb) / 100.0 * 1.8)
+            self.chips_kg_accum += chips_rate * dt_h
         if s.get("estado"):
             self.runtime_hours["secador"] += dt_h
             self.kwh_accum["secador"] += COMPONENT_POWER_KW["secador"] * dt_h
@@ -232,12 +249,28 @@ class OperationsService:
             for k in self.runtime_hours: self.runtime_hours[k] = 0.0
         if what in ("all", "energy"):
             for k in self.kwh_accum: self.kwh_accum[k] = 0.0
-            self.gas_m3_accum = 0.0
+            self.chips_kg_accum = 0.0
         if what in ("all", "production"):
             self.kg_produced = 0.0
             self.kg_input = 0.0
 
     def update_prices(self, prices: Dict[str, float]):
-        for k in ("kwh_ars", "m3_gas_ars", "kg_yerba_venta_ars"):
+        for k in ("kwh_ars", "kg_chips_ars", "kg_yerba_venta_ars"):
             if k in prices and prices[k] is not None:
                 self.prices[k] = float(prices[k])
+
+    def update_shifts(self, shifts_per_day: Optional[int] = None, hours_per_shift: Optional[float] = None):
+        if shifts_per_day is not None:
+            self.shifts_per_day = max(1, int(shifts_per_day))
+        if hours_per_shift is not None:
+            self.hours_per_shift = max(0.5, min(24.0, float(hours_per_shift)))
+
+    def update_thresholds(self, thresholds: Dict[str, Dict[str, float]]):
+        """Actualiza umbrales de mantenimiento. Estructura:
+           {"tambor_zapecado": {"lubricacion": 500, "rulemanes": 2000, ...}, ...}"""
+        for comp, actions in (thresholds or {}).items():
+            if comp not in self.thresholds:
+                self.thresholds[comp] = {}
+            for action, hours in actions.items():
+                if hours is not None:
+                    self.thresholds[comp][action] = float(hours)

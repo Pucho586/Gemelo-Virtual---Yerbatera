@@ -153,7 +153,7 @@ def build_monthly_report(data: Dict[str, Any], filepath: Path | None = None) -> 
         energy_rows.append([comp, f"{hours:.1f}", f"{kwh:.1f}", f"$ {kwh * data.get('kwh_price', 120):,.0f}"])
     if energy_rows:
         story.append(_table(["Componente", "Horas marcha", "kWh", "Costo ARS"], energy_rows))
-    story.append(Paragraph(f"Gas natural: {data.get('gas_m3', 0):.1f} m³ ($ {data.get('gas_cost_ars', 0):,.0f})",
+    story.append(Paragraph(f"Chips de madera (combustible): {data.get('chips_kg', 0):.1f} kg ($ {data.get('chips_cost_ars', 0):,.0f})",
                            styles["Sub"]))
 
     # Mantenimiento
