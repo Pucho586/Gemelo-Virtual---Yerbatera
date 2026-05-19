@@ -19,7 +19,8 @@ import OperacionesView from './components/OperacionesView';
 import Fase4View from './components/Fase4View';
 import MassFlowView from './components/MassFlowView';
 import DocsModal from './components/DocsModal';
-import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen } from '@phosphor-icons/react';
+import TourModal from './components/TourModal';
+import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen, GraduationCap } from '@phosphor-icons/react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', Icon: House, role: 'any' },
@@ -48,6 +49,16 @@ function AuthedApp() {
     try { return localStorage.getItem('yerba_mimic') || 'svg'; } catch (e) { return 'svg'; }
   });
   const [docsOpen, setDocsOpen] = useState(false);
+  const [tourOpen, setTourOpen] = useState(false);
+
+  // Autoabrir tour la primera vez (después de login)
+  useEffect(() => {
+    if (!user) return;
+    try {
+      const seen = localStorage.getItem('yerba_tour_seen');
+      if (!seen) setTourOpen(true);
+    } catch (e) { /* ignore */ }
+  }, [user]);
 
   useEffect(() => {
     const fetch = () => Promise.all([
@@ -130,6 +141,9 @@ function AuthedApp() {
             <button onClick={toggleMimic} className="text-xs font-mono text-slate-400 hover:text-amber-300 transition-colors border border-[#232A26] px-2 py-1" data-testid="mimic-toggle" title="Estilo de mímicos">
               {mimicStyle === 'svg' ? 'SVG' : 'P&ID'}
             </button>
+            <button onClick={() => setTourOpen(true)} className="inline-flex items-center gap-1 text-xs font-mono text-amber-300 hover:text-amber-200 transition-colors border border-amber-500/40 px-2 py-1" data-testid="tour-open-btn" title="Tour guiado de primer turno">
+              <GraduationCap size={12} /> Tour
+            </button>
             <button onClick={() => setDocsOpen(true)} className="inline-flex items-center gap-1 text-xs font-mono text-amber-300 hover:text-amber-200 transition-colors border border-amber-500/40 px-2 py-1" data-testid="docs-open-btn" title="Manuales del sistema">
               <BookOpen size={12} /> Manual
             </button>
@@ -180,6 +194,7 @@ function AuthedApp() {
         </div>
       </footer>
       {docsOpen && <DocsModal onClose={() => setDocsOpen(false)} />}
+      {tourOpen && <TourModal onClose={() => setTourOpen(false)} onJumpTab={(t) => { setTab(t); setTourOpen(false); }} />}
     </div>
   );
 }

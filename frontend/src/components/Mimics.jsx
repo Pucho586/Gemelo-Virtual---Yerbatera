@@ -184,44 +184,71 @@ export function CamaraMimic({ data, animated = true }) {
   const carga = data?.carga_kg ?? 0;
   const fill = Math.min(100, (carga / 1000) * 100);
   const co2Color = co2 > 5500 ? C.err : co2 > 4200 ? C.warn : C.ok;
+  const vapor = data?.vapor_activo && data?.vapor_caudal_kgh > 0;
   return (
-    <svg viewBox="0 0 480 240" className="w-full" data-testid={`mimic-cam-${data?.id ?? 0}`}>
-      {/* Cámara */}
-      <rect x="80" y="40" width="320" height="160" fill={C.surface} stroke={C.border} strokeWidth="2" />
-      <text x="240" y="60" fill={C.text} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.5">{data?.nombre || 'Cámara'}</text>
-      {/* Pila de yerba (carga) */}
-      <rect x="100" y={200 - fill * 1.2} width="280" height={fill * 1.2} fill="#3a2a1a" opacity="0.7" />
+    <svg viewBox="0 0 480 260" className="w-full" data-testid={`mimic-cam-${data?.id ?? 0}`}>
+      {/* Cámara - caja */}
+      <rect x="60" y="30" width="380" height="180" fill={C.surface} stroke={C.border} strokeWidth="2" />
+      <text x="250" y="22" fill={C.text} fontSize="11" fontFamily="JetBrains Mono" textAnchor="middle">{data?.nombre || 'Cámara'}</text>
+
+      {/* Pila de yerba en el fondo */}
+      <rect x="70" y={200 - fill * 1.4} width="360" height={fill * 1.4} fill="#3a2a1a" opacity="0.55" />
       {animated && carga > 0 && (
-        <rect x="100" y={200 - fill * 1.2} width="280" height="2" fill={C.amber} opacity="0.8">
-          <animate attributeName="opacity" values="0.4;1;0.4" dur="2s" repeatCount="indefinite" />
+        <rect x="70" y={200 - fill * 1.4} width="360" height="2" fill={C.amber} opacity="0.7">
+          <animate attributeName="opacity" values="0.3;0.9;0.3" dur="2.5s" repeatCount="indefinite" />
         </rect>
       )}
-      {/* Ventilador */}
-      <g transform="translate(420 80)">
-        <circle r="22" fill={C.surface} stroke={C.border} />
-        <g>
-          {animated && vent && <animateTransform attributeName="transform" type="rotate" from="0" to="-360" dur="1s" repeatCount="indefinite" additive="sum" />}
-          {[0, 90, 180, 270].map(a => (
-            <path key={a} d="M0 0 Q 8 -10 14 0 Q 8 -3 0 0 Z" fill={vent ? C.steam : C.border} transform={`rotate(${a})`} />
-          ))}
-          <circle r="3" fill={vent ? C.steam : C.border} />
-        </g>
-      </g>
-      {/* CO2 burbujas */}
-      {animated && carga > 0 && [150, 220, 290].map((x, i) => (
-        <circle key={i} cx={x} cy={195} r="2" fill={co2Color} opacity="0.6">
-          <animate attributeName="cy" from="195" to="70" dur="4s" begin={`${i * 1.2}s`} repeatCount="indefinite" />
-          <animate attributeName="opacity" values="0.6;0" dur="4s" begin={`${i * 1.2}s`} repeatCount="indefinite" />
+
+      {/* CO2 burbujas (de la pila hacia arriba) */}
+      {animated && carga > 0 && [120, 220, 320].map((x, i) => (
+        <circle key={i} cx={x} cy={195} r="2.5" fill={co2Color} opacity="0.55">
+          <animate attributeName="cy" from="195" to={60} dur="4s" begin={`${i * 1.3}s`} repeatCount="indefinite" />
+          <animate attributeName="opacity" values="0.6;0" dur="4s" begin={`${i * 1.3}s`} repeatCount="indefinite" />
         </circle>
       ))}
-      {/* Lecturas */}
-      <text x="100" y="100" fill={C.flame} fontSize="20" fontFamily="JetBrains Mono" fontWeight="300">{t.toFixed(1)}°</text>
-      <text x="100" y="115" fill={C.text} fontSize="8" fontFamily="JetBrains Mono" opacity="0.6">TEMP</text>
-      <text x="200" y="100" fill={C.steam} fontSize="20" fontFamily="JetBrains Mono" fontWeight="300">{h.toFixed(0)}%</text>
-      <text x="200" y="115" fill={C.text} fontSize="8" fontFamily="JetBrains Mono" opacity="0.6">HR</text>
-      <text x="290" y="100" fill={co2Color} fontSize="20" fontFamily="JetBrains Mono" fontWeight="300">{co2.toFixed(0)}</text>
-      <text x="290" y="115" fill={C.text} fontSize="8" fontFamily="JetBrains Mono" opacity="0.6">CO₂ ppm</text>
-      <text x="100" y="170" fill={C.amber} fontSize="14" fontFamily="JetBrains Mono">{carga} kg</text>
+
+      {/* Inyección de vapor desde arriba si está activa */}
+      {animated && vapor && [180, 250, 320].map((x, i) => (
+        <line key={`v${i}`} x1={x} y1={40} x2={x} y2={80} stroke={C.steam} strokeWidth="1.5" opacity="0.5">
+          <animate attributeName="opacity" values="0.2;0.7;0.2" dur="1.5s" begin={`${i * 0.4}s`} repeatCount="indefinite" />
+        </line>
+      ))}
+
+      {/* Ventilador */}
+      <g transform="translate(410 60)">
+        <circle r="18" fill={C.surface} stroke={C.border} />
+        <g>
+          {animated && vent && <animateTransform attributeName="transform" type="rotate" from="0" to="-360" dur="1.2s" repeatCount="indefinite" additive="sum" />}
+          {[0, 90, 180, 270].map(a => (
+            <path key={a} d="M0 0 Q 7 -9 12 0 Q 7 -3 0 0 Z" fill={vent ? C.steam : C.border} transform={`rotate(${a})`} />
+          ))}
+          <circle r="2.5" fill={vent ? C.steam : C.border} />
+        </g>
+      </g>
+
+      {/* === LECTURAS GRANDES EN BANDA INFERIOR === */}
+      <rect x="0" y="218" width="480" height="42" fill={C.bg} opacity="0.95" />
+      {/* TEMP */}
+      <text x="50" y="244" fill={C.flame} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="start">
+        {`${Number(t).toFixed(1)}°C`}
+      </text>
+      <text x="50" y="256" fill={C.text} fontSize="8" fontFamily="JetBrains Mono" opacity="0.55" textAnchor="start">TEMP</text>
+      {/* HR */}
+      <text x="200" y="244" fill={C.steam} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="start">
+        {`${Number(h).toFixed(1)}%`}
+      </text>
+      <text x="200" y="256" fill={C.text} fontSize="8" fontFamily="JetBrains Mono" opacity="0.55" textAnchor="start">HR</text>
+      {/* CO2 */}
+      <text x="330" y="244" fill={co2Color} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="start">
+        {`${Number(co2).toFixed(0)}`}
+      </text>
+      <text x="330" y="256" fill={C.text} fontSize="8" fontFamily="JetBrains Mono" opacity="0.55" textAnchor="start">CO₂ ppm</text>
+
+      {/* Carga (kg) arriba a la izquierda */}
+      <text x="70" y="52" fill={C.amber} fontSize="14" fontFamily="JetBrains Mono" fontWeight="500">
+        {`${Number(carga).toFixed(0)} kg`}
+      </text>
+      <text x="70" y="64" fill={C.text} fontSize="8" fontFamily="JetBrains Mono" opacity="0.5">CARGA</text>
     </svg>
   );
 }
@@ -322,18 +349,39 @@ export function CamaraPid({ data }) {
   const h = data?.humedad ?? 0;
   const co2 = data?.co2 ?? 0;
   return (
-    <svg viewBox="0 0 480 220" className="w-full" data-testid={`pid-cam-${data?.id ?? 0}`}>
-      <rect x="80" y="50" width="320" height="130" fill="none" stroke={C.text} strokeWidth="1.5" />
-      <text x="240" y="45" fill={C.text} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle">{data?.nombre || 'Cámara'}</text>
-      <circle cx="130" cy="100" r="18" fill="none" stroke={C.flame} strokeWidth="1.5" />
-      <text x="130" y="104" fill={C.flame} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle">TI</text>
-      <circle cx="240" cy="100" r="18" fill="none" stroke={C.steam} strokeWidth="1.5" />
-      <text x="240" y="104" fill={C.steam} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle">MI</text>
-      <circle cx="350" cy="100" r="18" fill="none" stroke={C.ok} strokeWidth="1.5" />
-      <text x="350" y="104" fill={C.ok} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle">QI·CO2</text>
-      <text x="130" y="155" fill={C.flame} fontSize="16" fontFamily="JetBrains Mono" textAnchor="middle">{t.toFixed(1)}°</text>
-      <text x="240" y="155" fill={C.steam} fontSize="16" fontFamily="JetBrains Mono" textAnchor="middle">{h.toFixed(0)}%</text>
-      <text x="350" y="155" fill={co2 > 4500 ? C.err : C.ok} fontSize="16" fontFamily="JetBrains Mono" textAnchor="middle">{co2.toFixed(0)}</text>
+    <svg viewBox="0 0 480 260" className="w-full" data-testid={`pid-cam-${data?.id ?? 0}`}>
+      <rect x="60" y="30" width="380" height="160" fill="none" stroke={C.text} strokeWidth="1.5" />
+      <text x="250" y="22" fill={C.text} fontSize="11" fontFamily="JetBrains Mono" textAnchor="middle">{data?.nombre || 'Cámara'}</text>
+
+      {/* Bubbles tipo P&ID */}
+      <circle cx="130" cy="100" r="22" fill="none" stroke={C.flame} strokeWidth="1.5" />
+      <text x="130" y="98" fill={C.flame} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle">TI</text>
+      <text x="130" y="113" fill={C.flame} fontSize="8" fontFamily="JetBrains Mono" textAnchor="middle">PT100</text>
+
+      <circle cx="250" cy="100" r="22" fill="none" stroke={C.steam} strokeWidth="1.5" />
+      <text x="250" y="98" fill={C.steam} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle">MI</text>
+      <text x="250" y="113" fill={C.steam} fontSize="8" fontFamily="JetBrains Mono" textAnchor="middle">CAP</text>
+
+      <circle cx="370" cy="100" r="22" fill="none" stroke={C.ok} strokeWidth="1.5" />
+      <text x="370" y="98" fill={C.ok} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle">QI</text>
+      <text x="370" y="113" fill={C.ok} fontSize="8" fontFamily="JetBrains Mono" textAnchor="middle">NDIR</text>
+
+      {/* Banda inferior con valores grandes (igual que SVG) */}
+      <rect x="0" y="200" width="480" height="60" fill={C.bg} opacity="0.95" />
+      <text x="130" y="232" fill={C.flame} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">
+        {`${Number(t).toFixed(1)}°C`}
+      </text>
+      <text x="130" y="246" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" opacity="0.55" textAnchor="middle">T en pared</text>
+
+      <text x="250" y="232" fill={C.steam} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">
+        {`${Number(h).toFixed(1)}%`}
+      </text>
+      <text x="250" y="246" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" opacity="0.55" textAnchor="middle">Humedad rel.</text>
+
+      <text x="370" y="232" fill={co2 > 4500 ? C.err : C.ok} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">
+        {`${Number(co2).toFixed(0)}`}
+      </text>
+      <text x="370" y="246" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" opacity="0.55" textAnchor="middle">CO₂ ppm</text>
     </svg>
   );
 }
