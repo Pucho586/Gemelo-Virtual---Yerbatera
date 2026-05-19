@@ -1,4 +1,5 @@
 """Servicio de clima usando Open-Meteo (sin API key)."""
+import math
 import asyncio
 import logging
 import bisect
@@ -108,17 +109,55 @@ class WeatherService:
             parsed = []
             for ts, t, h in fc:
                 try:
-                    # Open-Meteo entrega tiempos sin TZ pero ya en UTC (timezone=UTC)
                     dt = datetime.fromisoformat(ts).replace(tzinfo=timezone.utc) if "T" in ts else None
                     if dt is None: continue
                     parsed.append((dt, t, h))
                 except Exception:
                     pass
             self.forecast_hourly = sorted(parsed, key=lambda x: x[0])
-            # Inyectar forecast en simulator para que pueda interpolarlo
             self.simulator.set_forecast(self.forecast_hourly)
+            return True
         except Exception as e:
-            logger.warning(f"Weather fetch failed: {e}")
+            logger.warning(f"Weather fetch failed: {e}. Usando fallback estacional.")
+            # Fallback: generar forecast estacional sintético (24h ahora + 72h forward)
+            self._apply_fallback()
+            return False
+
+    def _apply_fallback(self):
+        """Genera un clima estacional plausible cuando Open-Meteo está caído.
+        Usa lat/long + mes del año para estimar T media y oscila diariamente.
+        """
+        lat = float(self.location.get("latitude", -27.0))
+        now = datetime.now(timezone.utc)
+        month = now.month
+        # T promedio estacional para Posadas/zona similar (hemisferio según signo lat)
+        # Para hemisferio sur: enero caliente, julio frío. Para norte: inverso.
+        is_south = lat < 0
+        t_avg_by_month_south = [27, 26, 24, 21, 18, 15, 15, 17, 20, 22, 24, 26]  # ene..dic
+        t_avg_by_month_north = [5, 6, 10, 14, 19, 23, 25, 25, 21, 16, 10, 6]
+        t_avg = (t_avg_by_month_south if is_south else t_avg_by_month_north)[month - 1]
+        # Generar forecast horario 96h: oscilación día/noche ±6°C
+        forecast = []
+        for h in range(96):
+            t_offset = -math.sin((h % 24 - 6) / 24 * 2 * math.pi) * 6.0  # min ~6am, max ~3pm
+            t = t_avg + t_offset
+            # Humedad: anticorrelada con T (sube de noche)
+            hum = 70 + (-t_offset * 2.5)
+            hum = max(40, min(95, hum))
+            ts = now + timedelta(hours=h)
+            forecast.append((ts, t, hum))
+        self.forecast_hourly = forecast
+        # Setear ambient actual al primer punto
+        t_now, h_now = forecast[0][1], forecast[0][2]
+        self.simulator.set_weather(t_now, h_now, {
+            "latitude": lat,
+            "longitude": self.location.get("longitude", 0),
+            "city": self.location.get("city", "Posadas, Misiones, Argentina"),
+            "updated_at": now.isoformat(),
+            "source": "fallback-seasonal",
+            "note": "Open-Meteo no disponible — clima estacional sintético",
+        })
+        self.simulator.set_forecast(self.forecast_hourly)
 
     def get_at(self, sim_time: datetime) -> Tuple[float, float] | None:
         """Devuelve (T, HR) interpolado al sim_time. None si no hay forecast."""

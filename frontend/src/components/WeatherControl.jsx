@@ -89,6 +89,21 @@ export default function WeatherControl({ ambient, weatherStatus }) {
                 ? `Última actualización: ${new Date(ambient.updated_at).toLocaleTimeString()}`
                 : 'Sin datos en vivo. Open-Meteo puede estar rate-limited.'}
             </div>
+            {ambient?.source === 'fallback-seasonal' && (
+              <div className="text-[10px] text-amber-300 font-mono mt-1" data-testid="weather-fallback-indicator">
+                ⚠ Clima estacional sintético (Open-Meteo no responde)
+              </div>
+            )}
+            {ambient?.source === 'manual' && (
+              <div className="text-[10px] text-cyan-300 font-mono mt-1">
+                ✓ Override manual aplicado
+              </div>
+            )}
+            {ambient?.source === 'open-meteo' && (
+              <div className="text-[10px] text-emerald-300 font-mono mt-1">
+                ● Datos en vivo de Open-Meteo
+              </div>
+            )}
           </div>
           <div className="grid grid-cols-2 gap-2 text-sm">
             <div className="border p-2" style={{ borderColor: 'var(--border)' }}>

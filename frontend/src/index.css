@@ -77,7 +77,7 @@ button { cursor: pointer; }
 input[type="number"]::-webkit-inner-spin-button,
 input[type="number"]::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 
-input.field, select.field {
+input.field, select.field, textarea.field {
   background: var(--surface-2);
   color: var(--text);
   border: 1px solid var(--border);
@@ -87,7 +87,15 @@ input.field, select.field {
   outline: none;
   transition: border-color 100ms ease;
 }
-input.field:focus, select.field:focus { border-color: var(--green); }
+input.field:focus, select.field:focus, textarea.field:focus { border-color: var(--green); }
+
+/* Universal fallback para cualquier textarea sin tema explícito */
+textarea {
+  background: var(--surface-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  font-family: 'JetBrains Mono', monospace;
+}
 
 /* Toggle */
 .toggle {
