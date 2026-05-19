@@ -414,6 +414,21 @@ async def search_weather(q: str):
     return await search_city(q)
 
 
+@api.post("/weather/manual")
+async def set_weather_manual(body: dict, user=Depends(admin_only)):
+    """Override manual de T/H ambiente (sirve cuando Open-Meteo está caído o
+    el operador quiere simular otro clima)."""
+    rt = get_runtime()
+    temp = float(body.get("temperature"))
+    hum = float(body.get("humidity"))
+    rt.simulator.set_weather(temp, hum, {
+        "city": rt.simulator.weather_meta.get("city", "Manual"),
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+        "source": "manual",
+    })
+    return {"ok": True, "ambient": {"temp": temp, "humidity": hum}}
+
+
 # ---------- IA ----------
 @api.post("/ai/chat")
 async def ai_chat(req: ChatRequest, user=Depends(current_user_dep)):

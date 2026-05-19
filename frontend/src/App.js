@@ -21,6 +21,7 @@ import MassFlowView from './components/MassFlowView';
 import DocsModal from './components/DocsModal';
 import TourModal from './components/TourModal';
 import SpeedControl from './components/SpeedControl';
+import WeatherControl from './components/WeatherControl';
 import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen, GraduationCap } from '@phosphor-icons/react';
 
 const TABS = [
@@ -133,7 +134,7 @@ function AuthedApp() {
             <StatusBadge state={status?.modbus?.running ? 'online' : 'offline'} label="Modbus" testid="modbus-badge" />
             <StatusBadge state={status?.mqtt?.running ? 'online' : 'offline'} label="MQTT" testid="mqtt-badge" />
             <StatusBadge state={status?.opcua?.running ? 'online' : 'offline'} label="OPC UA" testid="opcua-badge" />
-            <StatusBadge state={status?.weather?.running ? 'online' : 'offline'} label="Clima" testid="weather-badge" />
+            <WeatherControl ambient={state?.ambient} weatherStatus={status?.weather} />
             {activeAlarms > 0 && (
               <button onClick={() => setTab('ops')} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-mono uppercase tracking-wider border bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25 transition-colors" data-testid="alarms-badge-header">
                 <Bell size={12} weight="fill" /> {activeAlarms} alarm{activeAlarms === 1 ? 'a' : 'as'}

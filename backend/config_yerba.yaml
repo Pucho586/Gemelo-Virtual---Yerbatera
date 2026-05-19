@@ -77,9 +77,9 @@ limits:
   co2_max: 8000
   tau_camera: 600
 weather:
-  latitude: -31.4
-  longitude: -64.2
-  city: Córdoba
+  latitude: -27.3667
+  longitude: -55.8967
+  city: Posadas, Misiones, Argentina
   interval_seconds: 600
 persistence:
   enabled: true

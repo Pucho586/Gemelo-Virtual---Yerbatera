@@ -73,6 +73,8 @@ export const api = {
   // Weather
   getWeather: () => http.get('/weather').then(r => r.data),
   setWeatherLocation: (body) => http.post('/weather/location', body).then(r => r.data),
+  setWeatherManual: (body) => http.post('/weather/manual', body).then(r => r.data),
+  searchCity: (q) => http.get('/weather/search', { params: { q } }).then(r => r.data),
   searchWeather: (q) => http.get(`/weather/search?q=${encodeURIComponent(q)}`).then(r => r.data),
   // AI
   aiChat: (body) => http.post('/ai/chat', body).then(r => r.data),

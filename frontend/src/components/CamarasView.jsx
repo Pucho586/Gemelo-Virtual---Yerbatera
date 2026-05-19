@@ -1,38 +1,24 @@
-import React, { useEffect, useState } from 'react';
+import React from 'react';
 import { Card, CardHeader, Metric, Toggle, NumberInput, SectionTitle } from './UI';
 import { CamarasChart, flatten } from './Charts';
 import { CamaraMimic, CamaraPid } from './Mimics';
-import { ChamberSensorsBlock } from './StageBlock';
 import FaultPanel from './FaultPanel';
+import { useLocalSync } from '../lib/useLocalSync';
 import { api } from '../lib/api';
 import { useAuth, isAdmin } from '../lib/auth';
-import { Cloud, Drop, Thermometer, Fan, Package, Drop as Vapor, Plus, Minus } from '@phosphor-icons/react';
+import { Cloud, Drop, Thermometer, Fan, Plus, Minus } from '@phosphor-icons/react';
 
 function ChamberCard({ cam, idx, mimicStyle }) {
-  const [carga, setCarga] = useState(cam.carga_kg);
-  const [vent, setVent] = useState(cam.ventilador);
-  const [tObj, setTObj] = useState(cam.temperatura_obj);
-  const [hObj, setHObj] = useState(cam.humedad_obj);
-  const [co2Obj, setCo2Obj] = useState(cam.co2_obj);
-  const [tau, setTau] = useState(cam.tau ?? 600);
-  const [vaporOn, setVaporOn] = useState(cam.vapor_activo || false);
-  const [vaporCaudal, setVaporCaudal] = useState(cam.vapor_caudal_kgh || 0);
-  const [vaporT, setVaporT] = useState(cam.vapor_setpoint_temp || cam.temperatura_obj);
-  const [vaporH, setVaporH] = useState(cam.vapor_setpoint_hum || cam.humedad_obj);
-
-  useEffect(() => {
-    setCarga(cam.carga_kg);
-    setVent(cam.ventilador);
-    setTObj(cam.temperatura_obj);
-    setHObj(cam.humedad_obj);
-    setCo2Obj(cam.co2_obj);
-    setTau(cam.tau ?? 600);
-    setVaporOn(cam.vapor_activo || false);
-    setVaporCaudal(cam.vapor_caudal_kgh || 0);
-    setVaporT(cam.vapor_setpoint_temp || cam.temperatura_obj);
-    setVaporH(cam.vapor_setpoint_hum || cam.humedad_obj);
-  }, [cam.carga_kg, cam.ventilador, cam.temperatura_obj, cam.humedad_obj, cam.co2_obj, cam.tau,
-      cam.vapor_activo, cam.vapor_caudal_kgh, cam.vapor_setpoint_temp, cam.vapor_setpoint_hum]);
+  const [carga, setCarga] = useLocalSync(cam.carga_kg);
+  const [vent, setVent] = useLocalSync(cam.ventilador);
+  const [tObj, setTObj] = useLocalSync(cam.temperatura_obj);
+  const [hObj, setHObj] = useLocalSync(cam.humedad_obj);
+  const [co2Obj, setCo2Obj] = useLocalSync(cam.co2_obj);
+  const [tau, setTau] = useLocalSync(cam.tau ?? 600);
+  const [vaporOn, setVaporOn] = useLocalSync(cam.vapor_activo || false);
+  const [vaporCaudal, setVaporCaudal] = useLocalSync(cam.vapor_caudal_kgh || 0);
+  const [vaporT, setVaporT] = useLocalSync(cam.vapor_setpoint_temp || cam.temperatura_obj);
+  const [vaporH, setVaporH] = useLocalSync(cam.vapor_setpoint_hum || cam.humedad_obj);
 
   const apply = (patch) => api.patchCamara(idx, patch).catch(e => console.warn(e));
 
@@ -47,80 +33,84 @@ function ChamberCard({ cam, idx, mimicStyle }) {
         <h4 className="font-display text-base font-medium text-slate-100">{cam.nombre}</h4>
         <span className="font-mono text-[10px] text-slate-500">ID #{idx + 1}{cam.vapor_activo && cam.vapor_caudal_kgh > 0 && <span className="ml-2 text-cyan-300">·VAPOR</span>}</span>
       </div>
-      <div className="mb-4 border" style={{ borderColor: 'var(--border)' }}>
-        {mimicStyle === 'pid' ? <CamaraPid data={cam} /> : <CamaraMimic data={cam} />}
-      </div>
 
-      {/* === LECTURAS ACTUALES vs OBJETIVO === */}
-      <div className="border" style={{ borderColor: 'var(--border)' }}>
-        <div className="px-3 py-1.5 border-b text-[10px] font-mono uppercase tracking-wider text-slate-500" style={{ borderColor: 'var(--border)' }}>
-          Lectura real vs SP (objetivo)
+      {/* === LAYOUT 2 COLUMNAS === */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        {/* COLUMNA IZQUIERDA: Mímico + lecturas REAL vs SP */}
+        <div className="space-y-3">
+          <div className="border" style={{ borderColor: 'var(--border)' }}>
+            {mimicStyle === 'pid' ? <CamaraPid data={cam} /> : <CamaraMimic data={cam} />}
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="border p-2" style={{ borderColor: 'var(--border)' }}>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500">T real</div>
+              <div className="text-lg font-mono" style={{ color: tempColor }} data-testid={`cam-${idx}-temp`}>{cam.temperatura.toFixed(1)}°</div>
+              <div className="text-[10px] font-mono text-amber-400">SP {cam.temperatura_obj.toFixed(0)}°</div>
+            </div>
+            <div className="border p-2" style={{ borderColor: 'var(--border)' }}>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500">HR real</div>
+              <div className="text-lg font-mono" style={{ color: 'var(--hum)' }} data-testid={`cam-${idx}-hum`}>{cam.humedad.toFixed(0)}%</div>
+              <div className="text-[10px] font-mono text-amber-400">SP {cam.humedad_obj.toFixed(0)}%</div>
+            </div>
+            <div className="border p-2" style={{ borderColor: 'var(--border)' }}>
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500">CO₂</div>
+              <div className="text-lg font-mono" style={{ color: co2Color }} data-testid={`cam-${idx}-co2`}>{cam.co2.toFixed(0)}</div>
+              <div className="text-[10px] font-mono text-amber-400">SP {cam.co2_obj.toFixed(0)}</div>
+            </div>
+          </div>
+          <div className="text-[11px] font-mono text-slate-500 grid grid-cols-3 gap-2">
+            <div>Carga: <span className="text-slate-200">{cam.carga_kg} kg</span></div>
+            <div>Días: <span className="text-slate-200">{cam.tiempo_maduracion.toFixed(2)}</span></div>
+            <div>Vapor ac.: <span className="text-cyan-300">{(cam.vapor_kg_acum || 0).toFixed(1)} kg</span></div>
+          </div>
         </div>
-        <div className="grid grid-cols-3 gap-3 p-3">
+
+        {/* COLUMNA DERECHA: Controles (carga, SP, τ, ventilador, vapor) */}
+        <div className="space-y-4">
           <div>
-            <Metric label="T real" value={cam.temperatura.toFixed(1)} unit="°C" color={tempColor} testid={`cam-${idx}-temp`} />
-            <div className="text-[10px] font-mono text-slate-500 mt-1">SP: <span className="text-amber-300">{cam.temperatura_obj.toFixed(1)}°C</span></div>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2">Carga y ventilación</div>
+            <div className="grid grid-cols-2 gap-3">
+              <NumberInput testid={`cam-${idx}-carga`} label="Carga" unit="kg" value={carga} onChange={(v) => { setCarga(v); apply({ carga_kg: v || 0 }); }} min={0} max={5000} step={10} />
+              <div className="flex items-end justify-between">
+                <Toggle testid={`cam-${idx}-vent`} value={vent} onChange={(v) => { setVent(v); apply({ ventilador: v }); }} label={<span className="flex items-center gap-1 text-xs"><Fan size={12}/> {vent ? 'ON' : 'OFF'}</span>} />
+              </div>
+            </div>
           </div>
-          <div>
-            <Metric label="HR real" value={cam.humedad.toFixed(0)} unit="%" color="var(--hum)" testid={`cam-${idx}-hum`} />
-            <div className="text-[10px] font-mono text-slate-500 mt-1">SP: <span className="text-amber-300">{cam.humedad_obj.toFixed(0)}%</span></div>
+
+          <div className="pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+            <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2">Setpoints (objetivos)</div>
+            <div className="grid grid-cols-2 gap-3">
+              <NumberInput testid={`cam-${idx}-tobj`} label="SP T" unit="°C" value={tObj} onChange={(v) => { setTObj(v); apply({ temperatura_obj: v }); }} min={20} max={50} step={0.5} />
+              <NumberInput testid={`cam-${idx}-hobj`} label="SP HR" unit="%" value={hObj} onChange={(v) => { setHObj(v); apply({ humedad_obj: v }); }} min={40} max={95} step={1} />
+              <NumberInput testid={`cam-${idx}-co2obj`} label="SP CO₂" unit="ppm" value={co2Obj} onChange={(v) => { setCo2Obj(v); apply({ co2_obj: v }); }} min={400} max={6000} step={50} />
+              <NumberInput testid={`cam-${idx}-tau`} label="τ cámara" unit="s" hint="↓ τ = más rápido" value={tau} onChange={(v) => { setTau(v); apply({ tau: v }); }} min={30} max={3600} step={30} />
+            </div>
           </div>
-          <div>
-            <Metric label="CO₂ real" value={cam.co2.toFixed(0)} unit="ppm" color={co2Color} testid={`cam-${idx}-co2`} />
-            <div className="text-[10px] font-mono text-slate-500 mt-1">SP: <span className="text-amber-300">{cam.co2_obj.toFixed(0)}</span></div>
+
+          <div className="pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-300">💧 Inyección vapor / agua por techo</span>
+              <Toggle testid={`cam-${idx}-vapor`} value={vaporOn} onChange={(v) => { setVaporOn(v); apply({ vapor_activo: v }); }} label={vaporOn ? 'ON' : 'OFF'} />
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              <NumberInput testid={`cam-${idx}-vapor-caudal`} label="Caudal" unit="kg/h" value={vaporCaudal} onChange={(v) => { setVaporCaudal(v); apply({ vapor_caudal_kgh: v || 0 }); }} min={0} max={200} step={1} />
+              <NumberInput testid={`cam-${idx}-vapor-tsp`} label="SP T vap" unit="°C" value={vaporT} onChange={(v) => { setVaporT(v); apply({ vapor_setpoint_temp: v }); }} min={20} max={60} step={0.5} />
+              <NumberInput testid={`cam-${idx}-vapor-hsp`} label="SP HR vap" unit="%" value={vaporH} onChange={(v) => { setVaporH(v); apply({ vapor_setpoint_hum: v }); }} min={40} max={98} step={1} />
+            </div>
           </div>
         </div>
       </div>
 
-      <div className="grid grid-cols-3 gap-3 my-3 text-xs">
-        <div className="flex items-center gap-1.5 text-slate-400"><Package size={14}/> Carga: <span className="font-mono text-slate-200 ml-auto">{cam.carga_kg} kg</span></div>
-        <div className="flex items-center gap-1.5 text-slate-400">Días: <span className="font-mono text-slate-200 ml-auto">{cam.tiempo_maduracion.toFixed(2)}</span></div>
-        <div className="flex items-center gap-1.5 text-slate-400">Vapor ac.: <span className="font-mono text-cyan-300 ml-auto">{(cam.vapor_kg_acum || 0).toFixed(1)} kg</span></div>
-      </div>
-
-      {/* === CONTROLES MANUALES === */}
-      <div className="border pt-3 mt-3" style={{ borderTopColor: 'var(--border)' }}>
-        <div className="text-[10px] font-mono uppercase tracking-wider text-slate-500 mb-2">Setpoints y carga</div>
-        <div className="grid grid-cols-2 gap-3">
-          <NumberInput testid={`cam-${idx}-carga`} label="Carga" unit="kg" value={carga} onChange={(v) => { setCarga(v); apply({ carga_kg: v || 0 }); }} min={0} max={5000} step={10} />
-          <div className="flex items-end justify-between">
-            <Toggle testid={`cam-${idx}-vent`} value={vent} onChange={(v) => { setVent(v); apply({ ventilador: v }); }} label={<span className="flex items-center gap-1"><Fan size={12}/> {vent ? 'Ventilador On' : 'Ventilador Off'}</span>} />
-          </div>
-          <NumberInput testid={`cam-${idx}-tobj`} label="SP Temperatura" unit="°C" value={tObj} onChange={(v) => { setTObj(v); apply({ temperatura_obj: v }); }} min={20} max={50} step={0.5} />
-          <NumberInput testid={`cam-${idx}-hobj`} label="SP Humedad" unit="%" value={hObj} onChange={(v) => { setHObj(v); apply({ humedad_obj: v }); }} min={40} max={95} step={1} />
-          <NumberInput testid={`cam-${idx}-co2obj`} label="SP CO₂" unit="ppm" value={co2Obj} onChange={(v) => { setCo2Obj(v); apply({ co2_obj: v }); }} min={400} max={6000} step={50} />
-          <NumberInput testid={`cam-${idx}-tau`} label="τ cámara" unit="s" hint="Tiempo que tarda en converger al SP" value={tau} onChange={(v) => { setTau(v); apply({ tau: v }); }} min={30} max={3600} step={30} />
-        </div>
-      </div>
-
-      {/* Sensores derivados (PT100 doble + CO2 NDIR + vapor) */}
-      <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Sensores de campo</span>
-        <ChamberSensorsBlock cam={cam} />
-      </div>
-
-      {/* Inyección de vapor (= "entrada de agua/vapor por el techo") */}
-      <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-[10px] font-mono uppercase tracking-wider text-cyan-300 flex items-center gap-1"><Vapor size={12}/> Inyección de vapor/agua por techo</span>
-          <Toggle testid={`cam-${idx}-vapor`} value={vaporOn} onChange={(v) => { setVaporOn(v); apply({ vapor_activo: v }); }} label={vaporOn ? 'ON' : 'OFF'} />
-        </div>
-        <div className="grid grid-cols-3 gap-3">
-          <NumberInput testid={`cam-${idx}-vapor-caudal`} label="Caudal" unit="kg/h" value={vaporCaudal} onChange={(v) => { setVaporCaudal(v); apply({ vapor_caudal_kgh: v || 0 }); }} min={0} max={200} step={1} />
-          <NumberInput testid={`cam-${idx}-vapor-tsp`} label="SP Temp vapor" unit="°C" value={vaporT} onChange={(v) => { setVaporT(v); apply({ vapor_setpoint_temp: v }); }} min={20} max={60} step={0.5} />
-          <NumberInput testid={`cam-${idx}-vapor-hsp`} label="SP HR vapor" unit="%" value={vaporH} onChange={(v) => { setVaporH(v); apply({ vapor_setpoint_hum: v }); }} min={40} max={98} step={1} />
-        </div>
-      </div>
-
-      {/* Inyección de fallas */}
-      <div className="mt-3">
+      {/* === FALLAS (todo el ancho) === */}
+      <div className="mt-4">
         <FaultPanel
-          title="Fallas de cámara"
+          title="Inyección de fallas"
           faults={faults}
           defs={[
-            { key: 'falla_ventilador', label: 'Falla ventilador', hint: 'CO₂ sube, T no converge al SP.' },
-            { key: 'fuga_vapor', label: 'Fuga de vapor', hint: 'Se consume vapor sin aporte útil al ambiente.' },
-            { key: 'puerta_abierta', label: 'Puerta/techo abierta', hint: 'Pérdida acelerada hacia el ambiente.' },
+            { key: 'falla_ventilador', label: 'Falla ventilador', hint: 'Sin circulación: HR no converge, CO₂ sube.' },
+            { key: 'fuga_vapor', label: 'Fuga de vapor', hint: 'Se consume vapor sin aportar al ambiente interno.' },
+            { key: 'puerta_abierta', label: 'Puerta / techo abierta', hint: 'Pérdida acelerada hacia ambiente exterior.' },
           ]}
           onApply={apply}
           testidBase={`cam-${idx}-fault`}
@@ -135,14 +125,13 @@ export default function CamarasView({ state, series, mimicStyle = 'svg' }) {
   const admin = isAdmin(user);
   const camaras = state?.camaras || [];
   const data = flatten(series);
-  const [metric, setMetric] = useState('temp'); // temp | hum | co2
+  const [metric, setMetric] = React.useState('temp');
   const MAX = 12;
 
   const changeCount = async (delta) => {
     const target = Math.max(1, Math.min(MAX, camaras.length + delta));
     if (target === camaras.length) return;
-    try { await api.setCamarasCount(target); }
-    catch (e) { console.warn(e); }
+    try { await api.setCamarasCount(target); } catch (e) { console.warn(e); }
   };
 
   return (
@@ -150,7 +139,7 @@ export default function CamarasView({ state, series, mimicStyle = 'svg' }) {
       <Card className="p-0" testid="camaras-chart-card">
         <CardHeader
           title="Cámaras · Comparativa en tiempo real"
-          subtitle={`${camaras.length} cámara(s) · cada cámara tiene SP propio y τ configurable`}
+          subtitle={`${camaras.length} cámara(s) · SP, τ y fallas configurables por cámara`}
           action={
             <div className="flex items-center gap-3">
               {admin && (
@@ -179,32 +168,23 @@ export default function CamarasView({ state, series, mimicStyle = 'svg' }) {
         </div>
       </Card>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-px hair-grid">
+      <div className="grid grid-cols-1 gap-px hair-grid">
         {camaras.map((cam, i) => (
           <ChamberCard key={i} cam={cam} idx={i} mimicStyle={mimicStyle} />
         ))}
       </div>
 
-      {/* === AYUDA AL FONDO === */}
       <Card className="p-5" testid="camaras-explain">
         <SectionTitle kicker="?">¿Cómo funcionan las cámaras de maduración?</SectionTitle>
-        <p className="text-sm text-slate-300 mt-2 leading-relaxed">
-          Después del canchado, la yerba pasa al <span className="text-amber-300">estacionamiento</span>: se acopia en cámaras controladas durante
-          semanas o meses para que pierda el sabor "verde" y desarrolle aroma. El gemelo te deja:
-        </p>
-        <ul className="text-xs text-slate-400 font-mono mt-3 space-y-1.5 pl-3">
-          <li>• <span className="text-green-400">Lectura real vs SP</span>: cada cámara muestra el valor actual (T real, HR real, CO₂ real) y, debajo, el setpoint (objetivo). El valor real se acerca al SP <em>con el tiempo</em> según la constante τ.</li>
-          <li>• <span className="text-green-400">τ cámara</span>: cuánto tarda en converger. Bajalo (ej. 60 s) para ver cambios rápidos con la simulación; subilo (1800 s) para realismo.</li>
-          <li>• <span className="text-green-400">Cantidad de cámaras</span>: 1 a 12 (botones +/− arriba). Cuando transferís yerba al estacionamiento desde Mass-Flow, los kg se reparten en la cámara con menor carga.</li>
-          <li>• <span className="text-green-400">Ventilador</span> (modo natural): mueve el aire dentro de la cámara para acercarla a su SP de T y HR.</li>
-          <li>• <span className="text-cyan-300">Inyección de vapor/agua por techo</span>: toggle ON + caudal en kg/h. Fuerza la cámara hacia un SP propio mucho más rápido (60-180 s vs 600 s del modo natural). Útil para simular maduración acelerada con caldera + serpentín o ducha húmeda.</li>
-          <li>• <span className="text-blue-300">Carga (kg)</span>: cantidad de yerba dentro. Se incrementa al transferir desde Canchado o cargá manual.</li>
-          <li>• <span className="text-violet-300">Días maduración</span>: tiempo acumulado con carga &gt; 0. La velocidad depende del control de <em>tiempo</em> en el header (1×, 60×, 1h/s, 1d/s).</li>
-          <li>• <span className="text-amber-300">CO₂ (ppm)</span>: la yerba respira durante el añejado, sube si no se ventila. La inyección de vapor también lo expulsa.</li>
-          <li>• <span className="text-red-300">Fallas</span>: probá abrir el techo o simular fuga de vapor — los gráficos lo reflejan.</li>
+        <ul className="text-xs text-slate-400 font-mono mt-2 space-y-1.5 pl-3 leading-relaxed">
+          <li>• <span className="text-green-400">Izquierda</span>: mímico + lecturas REAL vs SP (T, HR, CO₂). El valor real se acerca al SP <em>con el tiempo</em> según τ.</li>
+          <li>• <span className="text-green-400">Derecha</span>: controles (carga, ventilador, SPs, τ, vapor).</li>
+          <li>• <span className="text-amber-300">τ cámara</span>: bajalo (60 s) para ver cambios rápidos; subilo (1800 s) para realismo.</li>
+          <li>• <span className="text-cyan-300">Inyección vapor/agua</span>: toggle ON + caudal → fuerza T/HR hacia SP propio muy rápido (caldera o ducha húmeda).</li>
+          <li>• <span className="text-red-300">Fallas</span>: probá apagar el ventilador y mirá cómo el CO₂ sube y la HR no converge.</li>
         </ul>
         <p className="text-[11px] font-mono text-slate-500 mt-3 leading-relaxed">
-          Todos los SP, fallas y τ están expuestos a Modbus/OPC UA (ver Manual técnico). Sensores reales (PT100 doble, NDIR, caudalímetro de vapor) se muestran dentro de cada card.
+          Todo (SPs, τ, fallas, vapor) expuesto a Modbus/OPC UA. Ver Manual técnico.
         </p>
       </Card>
     </div>

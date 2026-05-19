@@ -60,18 +60,38 @@ class Zapecado:
         self.falla_motor_tambor = False  # tambor parado (no avance, baja temp salida)
 
     def get_setpoint(self) -> float:
+        """SP dinámico fuertemente acoplado a vel.chip y vel.tambor.
+        - Más chip (combustible) → más T (cada 10 kg/h aporta ~14 °C).
+        - Más tambor (rpm) → más enfriamiento por transferencia → resta T.
+        - vel.tambor=0 → "ahogo": no hay transferencia, T cae al ambiente.
+        """
         if self.temperatura_obj is not None:
             return float(self.temperatura_obj)
-        return max(350.0, min(600.0, 400.0 + min(self.velocidad_chip, 200) * 1.0))
+        if self.velocidad_tambor <= 0:
+            return 280.0  # solo brasas residuales
+        base = 350.0 + min(self.velocidad_chip, 200) * 1.4    # 350-630°C
+        penalty_tambor = max(0.0, (self.velocidad_tambor - 30) * 1.2)  # 0..108°C
+        target = base - penalty_tambor
+        return max(200.0, min(620.0, target))
 
     def update(self, dt: float, ambient_temp: float):
         if self.falla_quemador or not self.estado_alimentacion:
             target = ambient_temp
         else:
             target = self.get_setpoint()
-        self.temperatura += (target - self.temperatura) / self.tau * dt
+        # τ efectivo: con tambor parado, respuesta muy lenta (calor estancado)
+        tau_eff = self.tau
+        if self.falla_motor_tambor or self.velocidad_tambor <= 0:
+            tau_eff = self.tau * 3.0
+        self.temperatura += (target - self.temperatura) / tau_eff * dt
         self.temperatura += random.uniform(-0.4, 0.4)
         self.temperatura = max(ambient_temp - 5, min(620.0, self.temperatura))
+
+    def vel_tambor_real(self) -> float:
+        """rpm efectiva (0 si no hay alimentación o motor caído)."""
+        if not self.estado_alimentacion or self.falla_motor_tambor:
+            return 0.0
+        return float(self.velocidad_tambor)
 
 
 class Secado:
@@ -96,22 +116,27 @@ class Secado:
         self.falla_serpentin = False    # calefactor no calienta
 
     def update(self, dt: float, ambient_temp: float, ambient_humidity: float):
+        # Acoplamiento físico: más aire = más pérdida convectiva (T target baja).
+        # vel_aire=0 con calefactor ON → T sube más alto (no se disipa).
+        v_aire_efectiva = 0.0 if self.falla_ventilador else max(self.velocidad_aire, 0.0)
         if self.falla_serpentin or not self.estado:
             target_t = ambient_temp
         else:
-            target_t = self.temperatura_obj
+            # Base SP del operador, ajustada por velocidad de aire (cooling effect)
+            cooling = (v_aire_efectiva - 2.5) * 2.5   # m/s × 2.5°C/(m/s)
+            target_t = self.temperatura_obj - cooling
         self.temperatura += (target_t - self.temperatura) / self.tau_t * dt
         self.temperatura += random.uniform(-0.2, 0.2)
         self.temperatura = max(ambient_temp - 5, min(120.0, self.temperatura))
 
         # Humedad: piso dinámico relacionado al ambiente y al SP del operador.
+        # Sin ventilador NO se evapora; con calefactor caído la HR se equilibra al ambiente.
         piso = max(self.humedad_obj, ambient_humidity * 0.25)
-        v_efectiva = 0.0 if self.falla_ventilador else max(self.velocidad_aire, 0.0)
-        if self.estado and not self.falla_serpentin and self.humedad > piso:
-            tasa = 0.0025 * (v_efectiva ** 0.5)
+        if self.estado and not self.falla_serpentin and not self.falla_ventilador and self.humedad > piso and v_aire_efectiva > 0.1:
+            tasa = 0.0030 * (v_aire_efectiva ** 0.6)
             self.humedad -= tasa * dt * (self.humedad - piso)
-        elif not self.estado or self.falla_serpentin:
-            # Se equilibra con el ambiente cuando está apagado o calefactor caído
+        elif not self.estado or self.falla_serpentin or self.falla_ventilador or v_aire_efectiva < 0.1:
+            # Se equilibra con el ambiente: sin aire/calor la HR sube hacia ambiente
             self.humedad += (ambient_humidity - self.humedad) / 600 * dt
         self.humedad += random.uniform(-0.05, 0.05)
         self.humedad = max(3.0, min(95.0, self.humedad))
@@ -141,16 +166,26 @@ class Canchado:
     def get_setpoint(self) -> float:
         if self.tamano_particula_obj is not None:
             return float(self.tamano_particula_obj)
-        return max(0.5, 10.0 - self.velocidad_molino * 0.07)
+        rpm_real = self.vel_molino_real()
+        if rpm_real <= 0:
+            # Molino parado: la partícula queda congelada en su último valor
+            return self.tamano_particula
+        return max(0.5, 10.0 - rpm_real * 0.07)
+
+    def vel_molino_real(self) -> float:
+        """rpm efectiva (0 si motor apagado o con falla)."""
+        if self.falla_motor or not self.estado:
+            return 0.0
+        return float(self.velocidad_molino)
 
     def update(self, dt: float):
         if self.falla_motor or not self.estado:
-            # Molino parado: la última carga queda igual
-            self.tamano_particula += random.uniform(-0.02, 0.02)
+            # Molino parado: la última carga queda igual, sin ruido perceptible
+            self.tamano_particula += random.uniform(-0.01, 0.01)
         else:
             target = self.get_setpoint()
             self.tamano_particula += (target - self.tamano_particula) / self.tau_p * dt
-            self.tamano_particula += random.uniform(-0.08, 0.08)
+            self.tamano_particula += random.uniform(-0.06, 0.06)
         self.tamano_particula = max(0.3, min(15.0, self.tamano_particula))
 
 
@@ -539,7 +574,8 @@ class YerbaProcessSimulator:
                 "temperatura": round(z.temperatura, 2),
                 "temperatura_obj": z.temperatura_obj,
                 "temperatura_sp_efectivo": round(z.get_setpoint(), 1),
-                "velocidad_tambor": z.velocidad_tambor,
+                "velocidad_tambor": z.velocidad_tambor,            # SP del operador
+                "velocidad_tambor_real": round(z.vel_tambor_real(), 1),  # rpm efectiva
                 "velocidad_chip": z.velocidad_chip,
                 "estado_alimentacion": z.estado_alimentacion,
                 "tau": z.tau,
@@ -575,7 +611,8 @@ class YerbaProcessSimulator:
                 },
             },
             "canchado": {
-                "velocidad_molino": c.velocidad_molino,
+                "velocidad_molino": c.velocidad_molino,                # SP del operador
+                "velocidad_molino_real": round(c.vel_molino_real(), 1), # rpm efectiva
                 "tamano_particula": round(c.tamano_particula, 2),
                 "tamano_particula_obj": c.tamano_particula_obj,
                 "tamano_particula_sp_efectivo": round(c.get_setpoint(), 2),
@@ -590,7 +627,7 @@ class YerbaProcessSimulator:
                     "vibrometro_x": can_vib_x if not c.rodamiento_caliente else round(can_vib_x + 4.0, 2),
                     "vibrometro_y": can_vib_y,                           # eje Y
                     "vibrometro_z": can_vib_z,                           # eje Z
-                    "encoder_rpm": round(c.velocidad_molino, 0) if c.estado and not c.falla_motor else 0,
+                    "encoder_rpm": round(c.vel_molino_real(), 0),        # encoder rotor
                     "h_nir_salida": can_h_nir,                           # NIR opcional
                 },
             },

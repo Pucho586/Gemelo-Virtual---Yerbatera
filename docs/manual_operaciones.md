@@ -75,23 +75,34 @@ En cada vista de etapa (Zapecado / Secado / Canchado / Cámaras) tenés:
    - **Cámara**: SP Temp, SP HR y SP CO₂ por cámara.
 
 2. **τ (tau)** — *constante de tiempo*: cuánto tarda en converger al SP, expresado en segundos de simulación.
-   - τ = 90 s → el valor se acerca al SP en ~3 minutos sim.
-   - τ = 600 s → conversión lenta (~30 min sim).
-   - Combinado con el control de velocidad del header, podés ver maduraciones de 24 meses en 5 minutos reales.
 
-3. **Velocidad de simulación** (control del header, ícono ⏱) — *compresión de tiempo*:
-   - `1×`: tiempo real (1 s real = 1 s simulado)
-   - `60×`: 1 minuto sim por segundo real (ideal para ver secado en 5 min)
-   - `1h/s`: 1 hora sim por segundo real (cámaras en pocos minutos)
-   - `1d/s`: 1 día sim por segundo real (maduración meses → segundos)
+3. **Velocidad de simulación** (control del header, ícono ⏱) — *compresión de tiempo*: 1×, 60×, 1h/s, 1d/s.
 
-4. **Inyección de fallas** (panel al pie de cada vista) — toggles para simular condiciones anormales:
-   - **Zapecado**: `falla quemador` (T cae al ambiente), `falla motor tambor`.
+4. **Acoplamientos físicos reales** (los cambios de un control afectan a los demás):
+   - **Zapecado**: SP dinámico = 350 + 1.4·vel.chips − 1.2·(vel.tambor − 30). Subí chips → T sube. Subí tambor → T baja por enfriamiento. Tambor = 0 → T cae a ~280 °C (ahogo).
+   - **Secado**: T efectiva = SP − 2.5·(vel.aire − 2.5). Más aire → más enfriamiento convectivo. HR baja proporcional a √(vel.aire).
+   - **Canchado**: grosor target = 10 − 0.07·rpm. Apagado → rpm = 0 (encoder y mímico lo reflejan), partícula congelada en último valor.
+   - **Cámara**: ventilador OFF → modo pasivo (70% ambiente + 30% SP). Vapor ON con caudal alto → τ efectivo se reduce a ~10% del nominal.
+
+5. **rpm/velocidades REAL vs SP**: la UI siempre muestra "VALOR REAL" + "SP". Cuando algo está apagado o falla, el valor REAL es 0 mientras el SP queda como referencia.
+
+6. **Inyección de fallas** (panel al pie de cada vista) — toggles para simular condiciones anormales:
+   - **Zapecado**: `falla quemador` (T cae al ambiente), `falla motor tambor` (τ ×3 más lento).
    - **Secado**: `falla ventilador` (HR no baja), `falla serpentín` (no calienta).
    - **Canchado**: `falla motor` (encoder 0 rpm), `rodamiento caliente` (alarma típica).
    - **Cámaras**: `falla ventilador`, `fuga de vapor`, `puerta/techo abierta`.
 
    Todas las fallas se reflejan en los sensores derivados, alarmas, y están **expuestas a Modbus (coils) y OPC UA (booleanos writable)**.
+
+### 3.2.6 Override manual del clima
+
+El sistema obtiene T/HR ambiente de Open-Meteo (API gratuita) según la ciudad configurada.
+Si la API está caída o tiene rate-limit, el badge "Clima" del header lo indica con ícono de nube tachada.
+Desde el panel del clima (clic en el badge) podés:
+- Buscar otra ciudad y aplicarla
+- Ingresar T/HR manualmente (override) — útil para simular climas extremos o cuando Open-Meteo no responde
+
+El override manual también está expuesto vía `POST /api/weather/manual` (admin).
 
 ### 3.3 Recetas
 

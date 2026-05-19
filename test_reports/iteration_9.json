@@ -1,0 +1,48 @@
+{
+  "summary": "Iteration 9 fixes verified end-to-end: weather manual override, deep physics coupling (chip/tambor → zapecado SP, vel_aire → secado cooling), velocidad_tambor_real / velocidad_molino_real real-vs-SP separation, and useLocalSync race-condition fix for toggles. 13/13 new pytest cases pass + 19/19 regression tests (iter6 + iter8) still green. Full frontend smoke across all 13 tabs without error boundaries.",
+  "backend_issues": {
+    "critical": [],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter9_fixes.py",
+    "/app/test_reports/pytest/iteration_9.xml"
+  ],
+  "what_was_verified": {
+    "bug_1_weather_manual": "POST /api/weather/manual {temperature:17.5, humidity:82} → state.ambient.{temp,humidity,source='manual',updated_at} correctly updated. Endpoint requires admin (401 without cookie). UI: weather-control-btn opens weather-panel; manual T/H apply propagates to /api/state (verified 21.3°C / 55%).",
+    "bug_2_zapecado_coupling": "temperatura_sp_efectivo = 350 + 1.4*chip - max(0,1.2*(tambor-30)). At defaults (chip=30, tambor=15) SP≈392°C ✓. chip=150 → SP≈560°C ✓. chip=100/tambor=50 → SP≈466°C ✓ (tambor cooling penalty active).",
+    "bug_2_secado_coupling": "vel_aire 2.5→10 m/s reduces measured T (cooling = (v-2.5)*2.5 = 18.75°C below SP). Verified T drops within 6s observation window.",
+    "bug_3_real_speeds": "state.zapecado.velocidad_tambor_real = 0 when estado_alimentacion=false OR falla_motor_tambor. state.canchado.velocidad_molino_real = 0 when estado=false OR falla_motor. SP values (velocidad_tambor/molino) remain intact. Frontend mímico Canchado shows canchado-rpm-real='0 rpm' while canchado-rpm-sp='60 rpm'.",
+    "bug_4_toggle_persistence": "Canchado estado toggle and Cámara cam-0-vent: after click OFF, aria-checked stays 'false' for 5+ seconds (useLocalSync 2.5s freeze prevents WS tick race condition).",
+    "bug_5_camaras_layout": "9 lg:grid-cols-2 containers found in cámaras view. Each chamber card shows mimic + real vs SP KPIs on the left column, controls (carga/SP/τ/vapor) on the right. Visually clean, no more 4-row confusion.",
+    "frontend_tabs": "All 13 tabs (tab-dashboard, tab-massflow, tab-zapecado, tab-secado, tab-canchado, tab-camaras, tab-recetas, tab-lotes, tab-ops, tab-i40, tab-fase4, tab-ia, tab-config) render without error boundaries.",
+    "header_integrations": "WS, Modbus, MQTT, OPC UA badges all green. Ambient indicator shows 21°/55% (manual override active)."
+  },
+  "test_history": {
+    "iter9_new_tests": "13 passed (test_iter9_fixes.py)",
+    "iter8_regression": "11 passed (test_iter8_sp_tau_faults.py)",
+    "iter6_regression": "8 passed (test_iter6_chips.py)"
+  },
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py is now 1214 lines — should be split into routers (auth, recipes, ops, replay, weather, calibration) for maintainability.",
+    "/api/weather/manual at server.py:418 accepts raw dict; would be cleaner with a Pydantic model (WeatherManualBody) for validation + OpenAPI docs.",
+    "yerba_simulator.py:88 clamps temperatura at 'ambient_temp - 5' which lets T go BELOW ambient — fine for the model but probably surprising in UI. Consider clamping at ambient_temp.",
+    "yerba_simulator.py: Zapecado.update returns target=ambient_temp when falla_quemador=True, but tau_eff stays at self.tau (90s). With ambient=17°C this means T drops slowly — fine, but worth a comment.",
+    "Canchado.update at L181: when off/faulted, tamano_particula drifts by ±0.01/tick which is technically noise on a stopped machine. The frozen-particle comment is correct; noise is just for visual realism."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter9_fixes.py (new, 13 tests)"
+  ],
+  "success_rate": {"backend": "100% (13/13 new + 19/19 regression = 32/32)", "frontend": "100% on smoke (13 tabs, weather panel, toggle persistence, real-vs-SP display)"},
+  "test_credentials": "admin/admin (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 9 closes the deep-physics + useLocalSync + weather-manual fixes. /api/weather/manual is admin-only and updates ambient.source='manual'. Coupling formulas: zapecado SP = 350+1.4*chip-1.2*max(0,tambor-30); secado target = SP - 2.5*max(0,vel_aire-2.5). velocidad_tambor_real and velocidad_molino_real are now separate from SP and reflect off/fault state. Toggle persistence relies on useLocalSync hook (2.5s local-state freeze post-edit) — if a future change reverts that, the toggle race condition will reappear. Test file at /app/backend/tests/test_iter9_fixes.py has env fixture that pre-resets sliders to defaults — keep that pattern. Open-Meteo is rate-limited (429) per user note; default ambient or manual override should be used. Two pre-existing failing tests (test_data_excel, test_zapecado_to_secado_with_merma) were intentionally NOT run per user instruction."
+}

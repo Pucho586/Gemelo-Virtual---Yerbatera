@@ -26,9 +26,14 @@ function metricColorTemp(t, max = 600) {
 
 export function ZapecadoMimic({ data, animated = true }) {
   const t = data?.temperatura ?? 0;
+  const sp = data?.temperatura_sp_efectivo ?? 0;
   const alim = data?.estado_alimentacion;
+  const tamborReal = data?.velocidad_tambor_real ?? 0;
+  const tamborSp = data?.velocidad_tambor ?? 0;
+  const chip = data?.velocidad_chip ?? 0;
   const flameOpacity = alim ? 0.9 : 0.15;
   const color = metricColorTemp(t);
+  const dur = (alim && tamborReal > 0) ? Math.max(0.8, 30 / tamborReal) : 9999;
   return (
     <svg viewBox="0 0 480 240" className="w-full" data-testid="mimic-zap">
       <defs>
@@ -45,17 +50,16 @@ export function ZapecadoMimic({ data, animated = true }) {
       {/* Tolva de chips */}
       <polygon points="50,20 130,20 100,80 80,80" fill={C.surface} stroke={C.border} />
       <text x="90" y="50" fill={C.text} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle">CHIPS</text>
+      <text x="90" y="65" fill={C.amber} fontSize="11" fontFamily="JetBrains Mono" textAnchor="middle">{`${chip.toFixed(0)} kg/h`}</text>
       {/* Cinta */}
       <rect x="80" y="80" width="80" height="6" fill={C.border} />
-      {animated && alim && (
+      {animated && alim && chip > 0 && (
         <g>
           <circle r="2" fill={C.amber}>
             <animate attributeName="cx" from="80" to="160" dur="2s" repeatCount="indefinite" />
-            <animate attributeName="cy" from="83" to="83" dur="2s" repeatCount="indefinite" />
           </circle>
           <circle r="2" fill={C.amber}>
             <animate attributeName="cx" from="80" to="160" dur="2s" begin="0.6s" repeatCount="indefinite" />
-            <animate attributeName="cy" from="83" to="83" dur="2s" begin="0.6s" repeatCount="indefinite" />
           </circle>
         </g>
       )}
@@ -65,10 +69,10 @@ export function ZapecadoMimic({ data, animated = true }) {
       <ellipse cx="280" cy="180" rx="100" ry="40" fill="url(#flame)" opacity={flameOpacity}>
         {animated && alim && <animate attributeName="ry" values="38;44;38" dur="1.8s" repeatCount="indefinite" />}
       </ellipse>
-      {/* Tambor rotando */}
+      {/* Tambor rotando — velocidad por rpm REAL, NO SP */}
       <g transform="translate(280 140)">
-        {animated && alim && (
-          <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur="6s" repeatCount="indefinite" />
+        {animated && tamborReal > 0 && (
+          <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur={`${dur}s`} repeatCount="indefinite" />
         )}
         <circle r="42" fill="none" stroke={color} strokeWidth="2" opacity="0.8" />
         <line x1="-42" y1="0" x2="42" y2="0" stroke={color} strokeWidth="1" opacity="0.6" />
@@ -78,8 +82,12 @@ export function ZapecadoMimic({ data, animated = true }) {
       <rect x="400" y="135" width="60" height="10" fill={C.border} />
       <polygon points="400,130 400,150 460,140" fill={C.border} />
       {/* Lecturas */}
-      <text x="280" y="35" fill={color} fontSize="32" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${t.toFixed(1)}°C`}</text>
-      <text x="280" y="55" fill={C.text} fontSize="11" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">T HORNO (gases)</text>
+      <text x="280" y="35" fill={color} fontSize="30" fontFamily="JetBrains Mono" fontWeight="600" textAnchor="middle">{`${t.toFixed(1)}°C`}</text>
+      <text x="280" y="52" fill={C.text} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.5">T REAL · SP {sp.toFixed(0)}°C</text>
+      {/* Velocidad tambor REAL */}
+      <text x="280" y="220" fill={tamborReal > 0 ? C.ok : C.err} fontSize="12" fontFamily="JetBrains Mono" textAnchor="middle">
+        {`Tambor: ${tamborReal.toFixed(0)} rpm`}
+      </text>
       <text x="430" y="180" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">SALIDA</text>
       <text x="430" y="195" fill={alim ? C.ok : C.err} fontSize="11" fontFamily="JetBrains Mono" textAnchor="middle">
         {alim ? 'FEED ON' : 'FEED OFF'}
@@ -141,10 +149,12 @@ export function SecadoMimic({ data, animated = true }) {
 }
 
 export function CanchadoMimic({ data, animated = true }) {
-  const rpm = data?.velocidad_molino ?? 0;
+  const rpmSp = data?.velocidad_molino ?? 0;
+  const rpmReal = data?.velocidad_molino_real ?? 0;
   const p = data?.tamano_particula ?? 0;
+  const sp = data?.tamano_particula_sp_efectivo ?? 0;
   const active = data?.estado;
-  const dur = active ? Math.max(0.25, 60 / Math.max(rpm, 1)) : 999;
+  const dur = (active && rpmReal > 0) ? Math.max(0.25, 60 / rpmReal) : 9999;
   return (
     <svg viewBox="0 0 480 240" className="w-full" data-testid="mimic-can">
       {/* Tolva de entrada */}
@@ -153,14 +163,14 @@ export function CanchadoMimic({ data, animated = true }) {
       {/* Molino */}
       <rect x="160" y="80" width="160" height="100" fill={C.surface} stroke={C.border} strokeWidth="2" />
       <g transform="translate(240 130)">
-        {animated && active && <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur={`${dur}s`} repeatCount="indefinite" additive="sum" />}
-        <circle r="35" fill="none" stroke="#D8B4FE" strokeWidth="2" />
+        {animated && rpmReal > 0 && <animateTransform attributeName="transform" type="rotate" from="0" to="360" dur={`${dur}s`} repeatCount="indefinite" />}
+        <circle r="35" fill="none" stroke="#D8B4FE" strokeWidth="2" opacity={rpmReal > 0 ? 1 : 0.3} />
         {[0, 45, 90, 135, 180, 225, 270, 315].map(a => (
-          <line key={a} x1="0" y1="0" x2={28 * Math.cos(a * Math.PI / 180)} y2={28 * Math.sin(a * Math.PI / 180)} stroke="#D8B4FE" strokeWidth="2" opacity="0.7" />
+          <line key={a} x1="0" y1="0" x2={28 * Math.cos(a * Math.PI / 180)} y2={28 * Math.sin(a * Math.PI / 180)} stroke="#D8B4FE" strokeWidth="2" opacity={rpmReal > 0 ? 0.7 : 0.25} />
         ))}
       </g>
-      {/* Polvo cayendo */}
-      {animated && active && [220, 240, 260].map((x, i) => (
+      {/* Polvo cayendo - sólo si molino activo */}
+      {animated && rpmReal > 0 && [220, 240, 260].map((x, i) => (
         <circle key={i} cx={x} cy="180" r="1.5" fill="#D8B4FE" opacity="0.6">
           <animate attributeName="cy" from="180" to="220" dur="1s" begin={`${i * 0.2}s`} repeatCount="indefinite" />
           <animate attributeName="opacity" values="0.8;0" dur="1s" begin={`${i * 0.2}s`} repeatCount="indefinite" />
@@ -168,10 +178,15 @@ export function CanchadoMimic({ data, animated = true }) {
       ))}
       {/* Salida */}
       <rect x="200" y="200" width="80" height="20" fill={C.border} />
-      <text x="240" y="35" fill="#D8B4FE" fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${rpm.toFixed(0)} rpm`}</text>
-      <text x="240" y="55" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">VEL. MOLINO</text>
-      <text x="390" y="130" fill={C.amber} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${p.toFixed(2)} mm`}</text>
-      <text x="390" y="148" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">PARTÍCULA</text>
+      {/* Lecturas REAL */}
+      <text x="240" y="35" fill={rpmReal > 0 ? '#D8B4FE' : C.err} fontSize="22" fontFamily="JetBrains Mono" fontWeight="600" textAnchor="middle">{`${rpmReal.toFixed(0)} rpm`}</text>
+      <text x="240" y="52" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.55">RPM REAL · SP {rpmSp.toFixed(0)}</text>
+      <text x="395" y="125" fill={C.amber} fontSize="20" fontFamily="JetBrains Mono" fontWeight="600" textAnchor="middle">{`${p.toFixed(2)} mm`}</text>
+      <text x="395" y="142" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.55">PARTÍCULA REAL</text>
+      <text x="395" y="158" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.4">SP {sp.toFixed(2)} mm</text>
+      <text x="240" y="230" fill={active && rpmReal > 0 ? C.ok : C.err} fontSize="11" fontFamily="JetBrains Mono" textAnchor="middle">
+        {active && rpmReal > 0 ? 'MILL ON' : 'MILL OFF'}
+      </text>
     </svg>
   );
 }

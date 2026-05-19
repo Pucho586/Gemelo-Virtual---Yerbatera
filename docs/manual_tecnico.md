@@ -572,8 +572,23 @@ valores también se refleja en Modbus y OPC UA** (ver §3.4).
 
 #### Configuración global de simulación
 - `POST /config` `{simulacion: {aceleracion: N}}` — N ∈ {1, 60, 3600, 86400} típico
-  (1× real, 1 min/s, 1 h/s, 1 día/s). También se puede setear desde el control de
-  velocidad del header (admin).
+  (1× real, 1 min/s, 1 h/s, 1 día/s).
+- `POST /weather/manual` `{temperature, humidity}` — Override manual ambient (admin).
+
+### 5.4 Acoplamientos físicos del modelo
+
+| Cambio operativo | Efecto en el modelo |
+|------------------|---------------------|
+| `vel.chips ↑` (zapecado) | SP dinámico sube 1.4 °C por kg/h |
+| `vel.tambor ↑` (zapecado) | SP baja 1.2 °C por rpm sobre 30 (enfriamiento) |
+| `vel.tambor = 0` (zapecado) | SP cae a 280 °C (ahogo), τ × 3 |
+| `vel.aire ↑` (secado) | T efectiva = SP − 2.5·(aire − 2.5); HR baja √(aire) |
+| `vel.aire = 0` (secado) | HR sube al ambiente (sin arrastre) |
+| `rpm ↑` (canchado) | Grosor target = 10 − 0.07·rpm |
+| `estado = OFF` (canchado) | rpm_real = 0, partícula congelada |
+| `ventilador OFF` (cámara) | Modo pasivo: target = 0.7·ambiente + 0.3·SP |
+| `vapor ON + caudal` (cámara) | τ efectivo = 10-30% del nominal |
+| `puerta_abierta` (cámara) | Pérdida acelerada 2% / s hacia ambiente |
 
 ### 5.4 Recetas
 - `GET /recipes`
