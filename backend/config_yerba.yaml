@@ -76,10 +76,10 @@ external:
     interval: 2.0
   opcua_client:
     enabled: true
-    interval: 2.0
     endpoint: opc.tcp://127.0.0.1:4840/yerba/
+    interval: 2.0
   mqtt_subscriber:
     enabled: true
-    port: 1883
     broker: localhost
+    port: 1883
     topic_base: yerba_in

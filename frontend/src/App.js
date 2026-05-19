@@ -15,7 +15,8 @@ import ConfigView from './components/ConfigView';
 import RecetasView from './components/RecetasView';
 import LotesView from './components/LotesView';
 import Industria40View from './components/Industria40View';
-import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs } from '@phosphor-icons/react';
+import OperacionesView from './components/OperacionesView';
+import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell } from '@phosphor-icons/react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', Icon: House, role: 'any' },
@@ -25,6 +26,7 @@ const TABS = [
   { id: 'camaras', label: 'Cámaras', Icon: Cloud, role: 'any' },
   { id: 'recetas', label: 'Recetas', Icon: ForkKnife, role: 'any' },
   { id: 'lotes', label: 'Lotes', Icon: Package, role: 'any' },
+  { id: 'ops', label: 'Operaciones', Icon: ChartLineUp, role: 'any' },
   { id: 'i40', label: 'Industria 4.0', Icon: Plugs, role: 'any' },
   { id: 'ia', label: 'IA · Gemini', Icon: Sparkle, role: 'any' },
   { id: 'config', label: 'Configuración', Icon: Gear, role: 'admin' },
@@ -36,6 +38,7 @@ function AuthedApp() {
   const { state, connected, series } = useLiveState({ historyLength: 240 });
   const [status, setStatus] = useState(null);
   const [mode, setMode] = useState('simulator');
+  const [activeAlarms, setActiveAlarms] = useState(0);
   const [mimicStyle, setMimicStyle] = useState(() => {
     try { return localStorage.getItem('yerba_mimic') || 'svg'; } catch (e) { return 'svg'; }
   });
@@ -44,12 +47,14 @@ function AuthedApp() {
     const fetch = () => Promise.all([
       api.servicesStatus().catch(() => null),
       api.getMode().catch(() => null),
-    ]).then(([s, m]) => {
+      api.alarmsActive().catch(() => []),
+    ]).then(([s, m, al]) => {
       if (s) setStatus(s);
       if (m) setMode(m.mode);
+      setActiveAlarms((al || []).length);
     });
     fetch();
-    const id = setInterval(fetch, 10000);
+    const id = setInterval(fetch, 8000);
     return () => clearInterval(id);
   }, []);
 
@@ -109,6 +114,11 @@ function AuthedApp() {
             <StatusBadge state={status?.mqtt?.running ? 'online' : 'offline'} label="MQTT" testid="mqtt-badge" />
             <StatusBadge state={status?.opcua?.running ? 'online' : 'offline'} label="OPC UA" testid="opcua-badge" />
             <StatusBadge state={status?.weather?.running ? 'online' : 'offline'} label="Clima" testid="weather-badge" />
+            {activeAlarms > 0 && (
+              <button onClick={() => setTab('ops')} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-mono uppercase tracking-wider border bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25 transition-colors" data-testid="alarms-badge-header">
+                <Bell size={12} weight="fill" /> {activeAlarms} alarm{activeAlarms === 1 ? 'a' : 'as'}
+              </button>
+            )}
             <button onClick={toggleMimic} className="text-xs font-mono text-slate-400 hover:text-amber-300 transition-colors border border-[#232A26] px-2 py-1" data-testid="mimic-toggle" title="Estilo de mímicos">
               {mimicStyle === 'svg' ? 'SVG' : 'P&ID'}
             </button>
@@ -142,6 +152,7 @@ function AuthedApp() {
         <div style={{ display: tab === 'camaras' ? 'block' : 'none' }}><CamarasView state={state} series={series} mimicStyle={mimicStyle} /></div>
         <div style={{ display: tab === 'recetas' ? 'block' : 'none' }}><RecetasView /></div>
         <div style={{ display: tab === 'lotes' ? 'block' : 'none' }}><LotesView /></div>
+        <div style={{ display: tab === 'ops' ? 'block' : 'none' }}><OperacionesView /></div>
         <div style={{ display: tab === 'i40' ? 'block' : 'none' }}><Industria40View /></div>
         <div style={{ display: tab === 'ia' ? 'block' : 'none' }}><AIPanel /></div>
         {isAdmin(user) && (

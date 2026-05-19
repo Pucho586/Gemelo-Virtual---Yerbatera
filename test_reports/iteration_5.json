@@ -1,0 +1,43 @@
+{
+  "summary": "FASE 3 Operaciones (Alarmas ISA-18.2 + OEE + Mantenimiento + Energía + Reportes PDF) testing completo. Backend: 89/89 pytest PASS (24 nuevos en test_fase3_ops.py + 65 regresión FASE 1+2). 1 skip aceptable (test_ack_flow no encontró alarma pendiente al correr). 1 BUG encontrado y arreglado: /api/reports/monthly devolvía 500 por TypeError en reports.py:119 cuando un batch tenía receta_nombre=None (`.get('k', default)[:25]` no aplica default si el value almacenado es None). Fix aplicado: `(b.get('receta_nombre') or '—')[:25]`. Frontend: tab Operaciones visible para admin y operario, 5 sub-tabs (alarms/oee/maint/energy/reports) presentes con testids correctos, OEE muestra valor (2.9%), Mantenimiento muestra 21 filas, Energía con 4 KPIs OK, Reportes con descarga mensual + 9 botones por lote. RBAC frontend operario verificado: prices-edit y reset-{energy,runtime,production,all} ocultos. report-monthly accesible para operario.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/reports/monthly", "issue": "FIXED durante testing: TypeError cuando batch.receta_nombre era None. Patrón `dict.get(k, default)` no protege contra value=None. Buscar otras ocurrencias similares en reports.py (kg_salida, merma_pct, operario ya usan `or '—'`, pero verificar batch_report)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_fase3_ops.py",
+    "/app/test_reports/pytest/iteration_5_fase3.xml",
+    "/app/test_reports/pytest/iteration_5_all.xml"
+  ],
+  "action_items": [
+    "Ninguna HIGH/CRITICAL. Bug fix de reports.py:119 ya aplicado y validado. Recomendación: revisar reports.py:117-124 y la build_batch_report para otros campos potencialmente None (kg_salida, merma_pct, operario, etapas, etc.) y usar consistentemente `(... or default)` en vez de `.get(k, default)`.",
+    "Considerar tracking de `hours_at_ack` en maintenance: el código en operations.py:194-199 ya lo guarda como `{action}_hours` pero el comentario dice 'Mejora futura: guardar hours_at_ack' — el comentario está desactualizado.",
+    "test_ack_flow se saltó por no haber alarma activa al momento. Si se desea cobertura forzada, el test podría disparar primero un setpoint extremo via PATCH /zapecado para garantizar alarma."
+  ],
+  "critical_code_review_comments": [
+    "reports.py: el patrón `b.get('receta_nombre', '—')[:25]` es un pitfall recurrente cuando el campo existe pero es None. Mejor `(b.get('receta_nombre') or '—')[:25]` en todos lados.",
+    "operations.py:169: el cálculo de produced_window divide por `max(self.runtime_hours['secador'], 0.01)` — si nunca operó produce división por 0.01 (=produced*100 si op_h=1h y runtime=0.01, raro). Trabaja porque al inicio kg_produced=0 también, pero matemáticamente frágil.",
+    "alarms.py: las reglas DEFAULT_RULES no se persisten en Mongo (solo custom). load_rules() siempre las mantiene como base. OK como diseño, documentar.",
+    "AlarmEngine.active es estado en memoria — si el backend reinicia, se pierde tracking de alarmas activas/unacked_rtn. Considerar reconstruir self.active desde DB al startup (alarmas con status in {unacked_active, acked_active, unacked_rtn}).",
+    "/api/reports/monthly y /api/reports/batch generan archivos físicos en backend/data/reports/ y devuelven FileResponse. No hay limpieza — crece sin límite. Considerar cleanup periódico o usar BytesIO + Response in-memory.",
+    "ops_service.tick() acumula gas_m3 con fórmula heurística (línea 122). Documentar la suposición o moverla a config."
+  ],
+  "updated_files": [
+    "/app/backend/twin/reports.py (1 línea: fix None-safety en línea 119)",
+    "/app/backend/tests/test_fase3_ops.py (nuevo, 24 tests)"
+  ],
+  "success_rate": {"backend": "100% (89/89 pass, 1 skip aceptable, FASE 3 + regresión FASE 1+2)", "frontend": "100% de los flujos solicitados (5 sub-tabs, RBAC operario, descargas PDF)"},
+  "test_credentials": "admin/admin, operario/operario, recovery: yerbatera-recovery-2026 (sin cambios)",
+  "seed_data_creation": "Generados varios audits (alarm_ack tentativo, maintenance_ack tambor_zapecado/lubricacion, price updates, ops/reset?what=energy x2). Batch TEST_F3 creado y cerrado para validar kg_produced increment. Custom alarm rule TEST_custom_rule creada y borrada.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "FASE 3 completa con un bug fix. Para regresión total: REACT_APP_BACKEND_URL=<url> pytest backend/tests/ -v (89 tests). Testids confirmados: tab-ops, ops-tab-{alarms|oee|maint|energy|reports}, oee-value, maint-row-N, alarm-row-{id}, alarm-ack-{id}, energy-{kwh|cost|margin|produced}, prices-edit/save, price-kwh/gas/yerba, reset-{energy|runtime|production|all}, report-monthly-download, report-batch-dl-{id}, alarms-badge-header. Para forzar alarmas reales, el simulador necesita zapecado.temperatura>540 (default actual del sim oscila ~530 por load mass effect; en test_alarm_generated_after_simulator_runs se esperó 15s tolerantes). Endpoint POST /ops/reset usa query param `what=` (no body). Bug fix aplicado en reports.py L119: cambiar también L121 (kg_salida), L122 (merma_pct), L123 (operario) preventivamente si se ven más None en producción.",
+  "rca of the issue": "Bug: /api/reports/monthly retornó 500. Reproducción: GET /api/reports/monthly con Bearer admin → 500. Trace: reports.py:119 `b.get('receta_nombre', '—')[:25]` → TypeError: 'NoneType' is not subscriptable. Causa raíz: en MongoDB algunos batches tienen el campo receta_nombre con valor explícito None (no ausente), por lo que dict.get devuelve None en vez del default '—'. El slicing [:25] sobre None falla. Mitigación aplicada: usar `(b.get('receta_nombre') or '—')[:25]`. Validado: tras hot-reload, GET /api/reports/monthly retorna 200 con Content-Type application/pdf y magic bytes %PDF."
+}

@@ -5,6 +5,7 @@ import logging
 import os
 import uuid
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
@@ -24,9 +25,12 @@ from twin.auth import (  # noqa: E402
     create_access_token, create_refresh_token, decode_token, get_current_user,
     get_recovery_code, hash_password, seed_users, verify_password,
 )
+from twin.alarms import AlarmEngine, DEFAULT_RULES  # noqa: E402
 from twin.batches import BatchService  # noqa: E402
 from twin.calibration import apply_calibration_to_simulator, calibrate_from_csv  # noqa: E402
+from twin.operations import OperationsService  # noqa: E402
 from twin.recipes import apply_recipe_to_simulator, get_default_recipes  # noqa: E402
+from twin.reports import build_batch_report, build_monthly_report  # noqa: E402
 from twin.runtime import get_runtime  # noqa: E402
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -38,6 +42,8 @@ mongo_client = AsyncIOMotorClient(mongo_url)
 db = mongo_client[os.environ["DB_NAME"]]
 batch_service = BatchService(db)
 audit_service = AuditService(db)
+alarm_engine = AlarmEngine(db)
+ops_service = OperationsService(db)
 
 
 # ---------- Lifespan ----------
@@ -46,12 +52,39 @@ async def lifespan(app: FastAPI):
     await seed_users(db)
     await batch_service.ensure_indexes()
     await audit_service.ensure_indexes()
+    await alarm_engine.ensure_indexes()
+    await alarm_engine.load_rules()
+    await ops_service.ensure_indexes()
+    await ops_service.load()
     rt = get_runtime()
     rt.start_all()
     await rt.start_async_services()
-    logger.info("Twin runtime ready")
+    # Loop de alarmas + operations tick
+    asyncio.create_task(_ops_alarm_loop())
+    logger.info("Twin runtime ready (FASE 3)")
     yield
     logger.info("Shutting down")
+
+
+async def _ops_alarm_loop():
+    """Tick para alarmas y contadores de operaciones (1Hz)."""
+    last = asyncio.get_event_loop().time()
+    while True:
+        try:
+            await asyncio.sleep(1.0)
+            rt = get_runtime()
+            now = asyncio.get_event_loop().time()
+            dt_real = now - last
+            last = now
+            state = rt.simulator.get_state()
+            dt_sim = dt_real * rt.simulator.aceleracion
+            ops_service.tick(state, dt_sim)
+            await alarm_engine.evaluate(state)
+            # Persistir ops state cada 30s
+            if int(now) % 30 == 0:
+                await ops_service.save()
+        except Exception as e:
+            logger.debug(f"ops/alarm loop: {e}")
 
 
 app = FastAPI(title="Gemelo Digital Yerba Mate", lifespan=lifespan)
@@ -434,6 +467,10 @@ async def close_batch(batch_id: str, body: BatchCloseBody, user=Depends(current_
     b = await batch_service.close_batch(batch_id, body.model_dump())
     if not b:
         raise HTTPException(404, "Lote no encontrado")
+    # Registrar producción en operations
+    if b.get("kg_salida") is not None:
+        ops_service.record_batch_close(b.get("kg_entrada", 0), b.get("kg_salida", 0))
+        await ops_service.save()
     return b
 
 
@@ -593,6 +630,165 @@ async def ws_stream(websocket: WebSocket):
             await websocket.close()
         except Exception:
             pass
+
+
+# ---------- FASE 3: Alarmas, OEE, Mantenimiento, Energía, Reportes ----------
+class AlarmAckBody(BaseModel):
+    alarm_id: str
+
+
+class AlarmRuleBody(BaseModel):
+    id: Optional[str] = None
+    name: str
+    tag: Optional[str] = None
+    tag_any_cam: Optional[str] = None
+    op: str
+    threshold: float
+    priority: str = "medium"
+    description: Optional[str] = ""
+    enabled: Optional[bool] = True
+
+
+class PricesBody(BaseModel):
+    kwh_ars: Optional[float] = None
+    m3_gas_ars: Optional[float] = None
+    kg_yerba_venta_ars: Optional[float] = None
+
+
+class MaintAckBody(BaseModel):
+    component: str
+    action: str
+
+
+@api.get("/alarms/active")
+async def alarms_active():
+    return list(alarm_engine.active.values())
+
+
+@api.get("/alarms/history")
+async def alarms_history(limit: int = 200, priority: Optional[str] = None, status: Optional[str] = None):
+    return await alarm_engine.history(limit=limit, priority=priority, status=status)
+
+
+@api.post("/alarms/ack")
+async def alarms_ack(body: AlarmAckBody, request: Request, user=Depends(current_user_dep)):
+    alarm = await alarm_engine.ack(body.alarm_id, user["username"])
+    if not alarm:
+        raise HTTPException(404, "Alarma no encontrada")
+    await audit_service.log(user["username"], "alarm_ack", {"alarm_id": body.alarm_id},
+                            ip=request.client.host if request.client else None)
+    return alarm
+
+
+@api.get("/alarms/rules")
+async def alarms_rules():
+    return alarm_engine.rules
+
+
+@api.post("/alarms/rules")
+async def alarms_upsert_rule(rule: AlarmRuleBody, user=Depends(admin_only)):
+    saved = await alarm_engine.upsert_rule(rule.model_dump(exclude_none=True))
+    return saved
+
+
+@api.delete("/alarms/rules/{rule_id}")
+async def alarms_delete_rule(rule_id: str, user=Depends(admin_only)):
+    await alarm_engine.delete_rule(rule_id)
+    return {"ok": True}
+
+
+@api.get("/oee")
+async def get_oee(window_hours: float = 24.0):
+    rt = get_runtime()
+    return ops_service.oee(window_hours=window_hours, throughput_kgh=rt.simulator.throughput_kgh)
+
+
+@api.get("/maintenance")
+async def get_maintenance():
+    return ops_service.maintenance_status()
+
+
+@api.post("/maintenance/ack")
+async def maintenance_ack(body: MaintAckBody, request: Request, user=Depends(current_user_dep)):
+    res = ops_service.ack_maintenance(body.component, body.action, user["username"])
+    await ops_service.save()
+    await audit_service.log(user["username"], "maintenance_ack",
+                            {"component": body.component, "action": body.action},
+                            ip=request.client.host if request.client else None)
+    return res
+
+
+@api.get("/energy")
+async def get_energy():
+    return {
+        "kwh_by_component": dict(ops_service.kwh_accum),
+        "total_kwh": ops_service.total_kwh(),
+        "gas_m3": ops_service.gas_m3_accum,
+        "prices": dict(ops_service.prices),
+        "energy_cost_ars": ops_service.energy_cost_ars(),
+        "kg_produced": ops_service.kg_produced,
+        "kg_input": ops_service.kg_input,
+        "revenue_ars": ops_service.revenue_ars(),
+        "cost_per_kg_ars": ops_service.cost_per_kg_ars(),
+        "margin_per_kg_ars": ops_service.margin_per_kg_ars(),
+        "runtime_hours": dict(ops_service.runtime_hours),
+    }
+
+
+@api.post("/energy/prices")
+async def set_prices(body: PricesBody, user=Depends(admin_only)):
+    ops_service.update_prices(body.model_dump(exclude_none=True))
+    await ops_service.save()
+    return ops_service.prices
+
+
+@api.post("/ops/reset")
+async def ops_reset(what: str = "all", user=Depends(admin_only)):
+    ops_service.reset(what)
+    await ops_service.save()
+    return {"ok": True, "what": what}
+
+
+@api.get("/reports/monthly")
+async def report_monthly(user=Depends(current_user_dep)):
+    rt = get_runtime()
+    batches = await batch_service.list_batches(limit=100)
+    alarms = await alarm_engine.history(limit=100)
+    data = {
+        "period": datetime.now(timezone.utc).strftime("%B %Y"),
+        "plant": "Yerbatera",
+        "oee": ops_service.oee(window_hours=24.0, throughput_kgh=rt.simulator.throughput_kgh),
+        "kg_produced": ops_service.kg_produced,
+        "energy_cost_ars": ops_service.energy_cost_ars(),
+        "cost_per_kg_ars": ops_service.cost_per_kg_ars(),
+        "margin_per_kg_ars": ops_service.margin_per_kg_ars(),
+        "batches": batches,
+        "alarms": alarms,
+        "kwh_by_component": dict(ops_service.kwh_accum),
+        "runtime_hours": dict(ops_service.runtime_hours),
+        "kwh_price": ops_service.prices["kwh_ars"],
+        "gas_m3": ops_service.gas_m3_accum,
+        "gas_cost_ars": ops_service.gas_m3_accum * ops_service.prices["m3_gas_ars"],
+        "maintenance": ops_service.maintenance_status(),
+    }
+    path = build_monthly_report(data)
+    return FileResponse(path, filename=path.name, media_type="application/pdf")
+
+
+@api.get("/reports/batch/{batch_id}")
+async def report_batch(batch_id: str, user=Depends(current_user_dep)):
+    batch = await batch_service.get_batch(batch_id)
+    if not batch:
+        raise HTTPException(404, "Lote no encontrado")
+    rt = get_runtime()
+    summary = {
+        "oee": ops_service.oee(window_hours=24.0, throughput_kgh=rt.simulator.throughput_kgh),
+        "cost_per_kg_ars": ops_service.cost_per_kg_ars(),
+        "margin_per_kg_ars": ops_service.margin_per_kg_ars(),
+        "total_kwh": ops_service.total_kwh(),
+    }
+    path = build_batch_report(batch, summary)
+    return FileResponse(path, filename=path.name, media_type="application/pdf")
 
 
 app.include_router(api)
