@@ -21,6 +21,7 @@ Permite operar en tres modos:
 | **Simulador** (verde) | Entrenamiento, pruebas, "qué pasa si". La planta no se ve afectada. | Operario en formación, ingeniero de procesos |
 | **Sombra** (azul) | El sistema lee el PLC real y compara contra el modelo matemático. Detecta drift y miscalibraciones. | Equipo de mantenimiento e instrumentación |
 | **Gemelo** (ámbar) | El PLC real alimenta el modelo. El simulador se pausa. Reportes y OEE reflejan planta real. | Supervisor de producción en planta operativa |
+| **Replay** (violeta) | Reproduce un CSV histórico al ritmo que elijas. Útil para certificar operarios con eventos reales pasados. | Capacitación / RRHH industrial |
 
 ---
 
@@ -30,10 +31,14 @@ Permite operar en tres modos:
 
 Abrí el navegador (Chrome / Firefox / Edge actualizado) en la URL provista por TI.
 
-- **Usuario admin:** `admin` / `admin` → configuración total, modo, recetas, precios, alarmas, mantenimiento.
-- **Usuario operario:** `operario` / `operario` → dashboard, lotes, ACK alarmas, lectura OEE/energía, reportes.
+**Usuarios por defecto** (cambiar contraseña en el primer ingreso):
 
-> Cambiá la contraseña en el primer ingreso desde **Perfil → Cambiar contraseña**.
+| Usuario  | Contraseña | Rol       | Permisos |
+|----------|-----------|-----------|----------|
+| `admin`  | `admin`   | admin     | Configuración total, modo, recetas, precios, alarmas, mantenimiento, cámaras count, what-if |
+| `operario` | `operario` | operator | Dashboard, lotes, ACK alarmas, lectura OEE/energía, reportes, what-if (solo lectura) |
+
+> **Importante**: cambiá la contraseña en el primer ingreso desde **Perfil → Cambiar contraseña**. Los datos por defecto se quitaron de la pantalla de login para evitar exposición innecesaria.
 
 ### 2.2 Recuperación de contraseña
 
@@ -107,6 +112,52 @@ Disponible solo para admin. Permite ajustar:
 - Aceleración de la simulación (1× = tiempo real, 60× = 1 min real por segundo)
 - Persistencia automática (cada N segundos a CSV/Excel)
 - Histórico descargable (CSV / XLSX por día)
+
+### 3.8 Replay & What-if (Fase 4)
+
+Pestaña central de **entrenamiento** y **simulación paralela**.
+
+**Replay histórico**:
+- Cargá un CSV diario (`yerba_history_YYYY-MM-DD.csv`) y reproducí lo ocurrido.
+- Velocidad ajustable entre **0.25× y 120×**.
+- Controles: Play, Pausa, Detener, Timeline (clic para saltar a una posición), velocidad en vivo.
+- Mientras está activo, el modo del header cambia a "Replay" (violeta).
+- Útil para: certificar operarios con eventos reales pasados, hacer post-mortems de turnos problemáticos, revisar un episodio de alarma.
+
+**What-if (escenarios paralelos)**:
+- Hasta **3 escenarios** corriendo en paralelo al baseline.
+- Cada escenario tiene un nombre y **overrides** en formato JSON. Ejemplos típicos:
+  ```json
+  { "secado": { "temperatura_setpoint": 105 }, "throughput_kgh": 600 }
+  { "zapecado": { "velocidad_chip": 25 } }
+  ```
+- Tabla comparativa en vivo: OEE, costo/kg, kWh acumulado, chips acumulados, T zapecado, T secado, HR final, producción.
+- **Verde** = mejor que baseline; **rojo** = peor. La interpretación depende del KPI (más OEE/producción es mejor; menos costo/kWh/chips/HR final es mejor).
+
+**Exposición a PLC / SCADA** — cada escenario es visible en tiempo real para tu PLC o SCADA:
+- **Modbus TCP**: unit IDs **20** (scenario1), **21** (scenario2), **22** (scenario3). Registros holding (HR) 0-7:
+  - HR[0] = OEE × 10 (entero 0-1000)
+  - HR[1] = Costo/kg × 10 (ARS)
+  - HR[2] = kWh × 10
+  - HR[3] = Chips kg × 10
+  - HR[4] = T zapecado × 10 (°C)
+  - HR[5] = T secado × 10 (°C)
+  - HR[6] = HR final × 10 (%)
+  - HR[7] = Producción kg (entero)
+- **OPC UA**: nodos `/Plant/WhatIf/scenario1/OEE`, `.../CostoPorKg`, `.../kWhAcum`, `.../ChipsKgAcum`, `.../TempZapecado`, `.../TempSecado`, `.../HumFinal`, `.../ProduccionKg`.
+- **MQTT**: topics `yerba/whatif/scenario1/OEE`, `yerba/whatif/scenario1/CostoPorKg`, etc.
+
+Esto permite que el SCADA muestre, lado a lado, el KPI real del baseline y el predictivo del escenario, sin tocar la lógica del PLC.
+
+### 3.9 Cámaras de maduración
+
+Cantidad de cámaras **configurable de 1 a 12** desde la pestaña Cámaras (botones +/− en el encabezado, solo admin).
+
+Cada cámara tiene dos sistemas de control independientes:
+- **Ventilador**: ON/OFF. Cuando está ON, la cámara busca su setpoint clásico (T objetivo, HR objetivo). Cuando está OFF, se mezcla parcialmente con el ambiente.
+- **Inyección de vapor**: ON/OFF + caudal en kg/h (0-200) + setpoint propio de temperatura y humedad. Cuando el vapor está activo, fuerza a la cámara hacia esos setpoints con una constante de tiempo mucho más corta (control rápido). El acumulado de kg de vapor inyectado queda registrado para costos.
+
+> El consumo de vapor permite simular maduración real con inyección, no solo intercambio térmico pasivo. Ideal para plantas que usan caldera + serpentín en cada cámara.
 
 ---
 

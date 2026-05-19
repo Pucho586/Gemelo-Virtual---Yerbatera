@@ -32,13 +32,20 @@
               (tick = ~50 ms sim)             reglas + history Mongo         OEE + maint + costos
                        │                                  │                          │
                        ├──► Modbus TCP server :5020       │                          │
+                       │     (units 0-14 stages+cams,     │                          │
+                       │      20-22 whatif)                │                          │
                        ├──► OPC UA server :4840            │                          │
+                       │     (12 chamber slots + WhatIf)   │                          │
                        ├──► MQTT publisher (broker ext)    │                          │
                        ├──► Modbus client (IN)             │                          │
                        ├──► OPC UA client  (IN)            │                          │
                        ├──► MQTT subscriber                │                          │
                        ├──► Weather (Open-Meteo)           │                          │
-                       └──► PersistenceService (CSV/XLSX)  │                          │
+                       ├──► PersistenceService (CSV/XLSX)  │                          │
+                       ├──► ReplayService (FASE 4)         │                          │
+                       └──► WhatIfService (FASE 4)         │                          │
+                            └─► 3 sims paralelas →         │                          │
+                                Modbus 20-22 / OPCUA / MQTT│                          │
                                                           ▼                          ▼
                                                        MongoDB                MongoDB `ops_state`
                                                   (alarms_active,             reports/*.pdf
@@ -48,11 +55,12 @@
 
 **Modos de operación** (controlados por `RuntimeMode` enum):
 
-| Modo | Simulador | Cliente externo | Drift |
-|------|-----------|-----------------|-------|
-| `simulator` | tick activo | ignorado | n/a |
-| `shadow` | tick activo | leído pero NO inyectado | calculado |
-| `twin` | tick pausado | inyectado al estado | trivial |
+| Modo | Simulador | Cliente externo | CSV histórico | Drift |
+|------|-----------|-----------------|---------------|-------|
+| `simulator` | tick activo | ignorado | n/a | n/a |
+| `shadow` | tick activo | leído pero NO inyectado | n/a | calculado |
+| `twin` | tick pausado | inyectado al estado | n/a | trivial |
+| `replay` | tick pausado | ignorado | feed al estado | n/a |
 
 ---
 
@@ -80,6 +88,8 @@
 │       ├── calibration.py         # CSV → offset/gain
 │       ├── alarms.py              # AlarmEngine ISA-18.2 + reglas
 │       ├── operations.py          # OEE + mantenimiento + energía + costos
+│       ├── replay_service.py      # FASE 4 — replay de CSV histórico
+│       ├── whatif_service.py      # FASE 4 — escenarios paralelos + SCADA exposure
 │       └── reports.py             # ReportLab PDF builder
 └── frontend/
     ├── .env                       # REACT_APP_BACKEND_URL
@@ -102,6 +112,7 @@
             ├── LotesView.jsx
             ├── Industria40View.jsx  # Drift + clientes IN + calibración
             ├── OperacionesView.jsx  # Alarmas + OEE + Mant + Energía + Reportes
+            ├── Fase4View.jsx        # FASE 4 — Replay & What-if
             ├── ZapecadoView.jsx
             ├── SecadoView.jsx
             ├── CanchadoView.jsx
@@ -241,6 +252,77 @@ Endpoints:
 
 Las preguntas reciben como contexto el snapshot del simulador, alarmas activas y OEE. La respuesta es en español.
 
+### 3.9 ReplayService (`replay_service.py`) — FASE 4
+
+Reproductor de CSV histórico que alimenta el simulador en modo `replay`.
+
+```python
+class ReplayService:
+    def start(file, speed=10.0, start_row=0): ...   # arranca un thread daemon
+    def stop(): ...
+    def pause(paused: bool): ...
+    def seek(row: int): ...                          # también aplica la fila inmediatamente
+    def set_speed(speed: float): ...                 # 0.25 a 120
+    def status() -> dict: ...                        # active, paused, cursor, total, progress, ts_at_cursor
+```
+
+Cuando el modo es `replay`, el bucle del simulador (`yerba_simulator.update()`) **no** recalcula; en su lugar el thread del replay escribe cada fila del CSV directamente en los atributos del simulator:
+
+```
+sim.zapecado.temperatura = row["zap_temperatura"]
+sim.secado.temperatura   = row["sec_temperatura"]
+sim.secado.humedad       = row["sec_humedad"]
+sim.canchado.velocidad_molino = row["can_velocidad_molino"]
+for i, cam in enumerate(sim.camaras):
+    cam.temperatura = row[f"cam{i+1}_temperatura"]
+    cam.humedad     = row[f"cam{i+1}_humedad"]
+    cam.co2         = row[f"cam{i+1}_co2"]
+```
+
+> Las columnas del CSV están **1-indexadas** (`cam1_*`, `cam2_*`...) por compatibilidad con persistencia histórica.
+
+El throughput entre filas se controla con `sleep(1 / speed)` en el thread, asegurando avance regular sin importar la frecuencia original del muestreo.
+
+### 3.10 WhatIfService (`whatif_service.py`) — FASE 4
+
+Corre hasta **3 escenarios paralelos**. Cada escenario es un `WhatIfScenario` con:
+- Un `YerbaProcessSimulator` instanciado a partir de una copia del `config` baseline + overrides aplicados con notación punto (`"zapecado.velocidad_chip": 25` o `{"zapecado": {"velocidad_chip": 25}}`).
+- Contadores propios de kWh, chips, runtime, producción.
+- KPIs calculados al vuelo: OEE, costo/kg, kWh acum, chips kg, T zapecado, T secado, HR final, producción kg.
+
+Bucle único (`_loop`, thread daemon):
+```
+cada 1s:
+    for cada scenario:
+        scenario.step(ambient_t, ambient_h)         # avanza simulator + acumula
+        kpis = scenario.compute_kpis(prices)         # calcula los 8 KPIs
+        publicar a:
+            - OPC UA: /Plant/WhatIf/scenario{N}/{KPI}
+            - Modbus: unit {20,21,22}.HR[0..7] = KPI × 10
+            - MQTT: yerba/whatif/scenario{N}/{KPI}
+```
+
+**Exposición a SCADA / PLC** — el mismo set de 8 KPIs aparece en los 3 protocolos en paralelo, por escenario:
+
+| Protocolo | Endpoint del escenario N |
+|-----------|--------------------------|
+| Modbus TCP | unit ID `19 + N` (scenario1=20, scenario2=21, scenario3=22), HR[0..7] |
+| OPC UA | `/Plant/WhatIf/scenarioN/OEE`, `.../CostoPorKg`, `.../kWhAcum`, `.../ChipsKgAcum`, `.../TempZapecado`, `.../TempSecado`, `.../HumFinal`, `.../ProduccionKg` |
+| MQTT | `yerba/whatif/scenarioN/{OEE\|CostoPorKg\|kWhAcum\|ChipsKgAcum\|TempZapecado\|TempSecado\|HumFinal\|ProduccionKg}` |
+
+Esto le permite al SCADA leer y comparar baseline vs. variantes en tiempo real sin modificar la lógica del PLC.
+
+### 3.11 Cámaras dinámicas + inyección de vapor
+
+`YerbaProcessSimulator.set_camaras_count(n)` permite crecer/encoger la lista de cámaras entre 1 y `MAX_CAMARAS = 12` en caliente. Modbus pre-aloca 12 slots (unit IDs 3..14) y OPC UA pre-aloca 12 nodos (`Camara1` … `Camara12`) con una variable `Activa: bool` que indica si la cámara existe en la corrida actual.
+
+Cada `CamaraMaduracion` ahora tiene tres modos de operación:
+1. **Vapor activo + caudal > 0** → tau corto (~60-180s), busca `vapor_setpoint_temp`/`vapor_setpoint_hum`. Acumula `vapor_kg_acum`.
+2. **Solo ventilador** → tau original (600s default), busca `temperatura_obj`/`humedad_obj`.
+3. **Pasivo** → 70% ambiente + 30% setpoint.
+
+El consumo de vapor se calcula como `vapor_caudal_kgh × dt_h` y queda disponible para análisis de costos (caldera, agua, gas si la caldera lo usa, etc.).
+
 ---
 
 ## 4. Modelo de datos (MongoDB)
@@ -332,7 +414,29 @@ Las preguntas reciben como contexto el snapshot del simulador, alarmas activas y
 - `GET /reports/monthly` → PDF
 - `GET /reports/batch/{id}` → PDF
 
-### 5.10 Config + clima + IA + datos
+### 5.10 FASE 4 — Replay
+- `GET /replay/files` → lista de CSVs en `backend/data/`
+- `GET /replay/status` → `{active, paused, file, speed, cursor, total, progress, ts_at_cursor}`
+- `POST /replay/start` (admin) `{file, speed?, start_row?}` — pone modo en `replay`
+- `POST /replay/stop` (admin) — restaura modo `simulator`
+- `POST /replay/pause` (admin) `{paused: bool}`
+- `POST /replay/seek` (admin) `{row: int}`
+- `POST /replay/speed` (admin) `{speed: float}` — 0.25 a 120
+
+### 5.11 FASE 4 — What-if
+- `GET /whatif` → lista escenarios con KPIs
+- `POST /whatif` (admin) `{name, overrides}` — máx 3 escenarios
+- `POST /whatif/{id}` (admin) `{overrides}` — actualiza overrides (reinicia contadores)
+- `DELETE /whatif/{id}` (admin)
+- `POST /whatif/reset` (admin) — borra todos
+
+> **Importante**: orden de rutas. `/whatif/reset` debe declararse ANTES de `/whatif/{scenario_id}` en `server.py`. Mismo patrón aplica a `/camaras/count` antes de `/camaras/{idx}`.
+
+### 5.12 Cámaras dinámicas
+- `POST /camaras/count` (admin) `{count: 1..12}` — agrega/quita cámaras desde el final, persiste en `config_yerba.yaml`
+- `POST /camaras/{idx}` `{carga_kg?, ventilador?, temperatura_obj?, humedad_obj?, co2_obj?, vapor_activo?, vapor_caudal_kgh?, vapor_setpoint_temp?, vapor_setpoint_hum?}`
+
+### 5.13 Config + clima + IA + datos
 - `GET /config` / `POST /config`
 - `GET /weather` / `POST /weather/location` / `GET /weather/search?q=`
 - `POST /ai/chat` / `GET /ai/history/{sid}` / `POST /ai/reset/{sid}`
@@ -471,10 +575,13 @@ Logs:
 
 ## 11. Próximos hitos (roadmap)
 
-### Fase 4 — Entrenamiento (próxima)
-- [ ] Modo **replay** de CSV histórico a 10× velocidad.
-- [ ] Modo **"qué pasaría si"** (fork de simulación con parámetros alternativos vs baseline).
-- [ ] Catálogo de escenarios de falla predefinidos.
+### FASE 4 — Entrenamiento (✅ COMPLETADA)
+- [x] Modo **replay** de CSV histórico con velocidad 0.25× - 120×.
+- [x] Modo **"qué pasaría si"** (3 escenarios paralelos vs baseline).
+- [x] Exposición de cada escenario a **PLC / SCADA** vía Modbus / OPC UA / MQTT.
+- [x] Cámaras configurables (1-12) + inyección de vapor por cámara.
+- [ ] Catálogo de escenarios de falla predefinidos (entrenamiento estructurado).
+- [ ] "Snapshot → What-if": botón para capturar el estado actual del baseline como punto de partida de un escenario, sin escribir JSON.
 
 ### Quick wins (P1)
 - [ ] Gestión de usuarios desde UI (admin CRUD + cambio de rol).
@@ -488,6 +595,7 @@ Logs:
 - [ ] OEE con ventana basada en histórico real, no proporcional.
 - [ ] Migrar la constante `BASE_CHIP_CALORIFIC_MJ_KG` a `config_yerba.yaml`.
 - [ ] Refactor `external_sources.py`: eliminar warnings de `coroutine never awaited` en OPC UA client.
+- [ ] CamaraMimic SVG: ajustar tamaños de TEMP/HR para que no queden cortados en algunas resoluciones.
 
 ---
 

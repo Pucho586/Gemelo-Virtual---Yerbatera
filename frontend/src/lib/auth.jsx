@@ -11,7 +11,13 @@ export function AuthProvider({ children }) {
     let mounted = true;
     api.me()
       .then(u => { if (mounted) setUser(u); })
-      .catch(() => { if (mounted) setUser(null); })
+      .catch(() => {
+        // Token inválido o expirado: limpiar todo para mostrar login sin trabas
+        if (mounted) {
+          setAuthToken(null);
+          setUser(null);
+        }
+      })
       .finally(() => { if (mounted) setLoading(false); });
     return () => { mounted = false; };
   }, []);

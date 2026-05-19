@@ -92,7 +92,7 @@ function ReplayPanel({ admin }) {
             >
               <option value="">— Elegí un CSV —</option>
               {files.map(f => (
-                <option key={f.name} value={f.name}>{f.name} ({(f.size / 1024).toFixed(1)} KB)</option>
+                <option key={f.name} value={f.name}>{`${f.name} (${(f.size / 1024).toFixed(1)} KB)`}</option>
               ))}
             </select>
           </div>

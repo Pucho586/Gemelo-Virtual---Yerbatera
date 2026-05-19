@@ -77,9 +77,7 @@ export default function Login() {
             </button>
             <div className="border-t pt-4 mt-2" style={{ borderColor: 'var(--border)' }}>
               <p className="text-[10px] font-mono text-slate-500 leading-relaxed">
-                <span className="text-slate-400">Usuarios por defecto:</span><br/>
-                · admin / admin (configuración total)<br/>
-                · operario / operario (operación)
+                Acceso restringido. Si no tenés credenciales, contactá al administrador de la planta.
               </p>
             </div>
           </form>
