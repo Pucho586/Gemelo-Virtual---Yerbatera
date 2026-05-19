@@ -1,0 +1,68 @@
+camaras:
+- co2_objetivo: 3000
+  humedad_objetivo: 75
+  nombre: Camara 1
+  temperatura_objetivo: 35
+- co2_objetivo: 3200
+  humedad_objetivo: 70
+  nombre: Camara 2
+  temperatura_objetivo: 36
+- co2_objetivo: 3100
+  humedad_objetivo: 78
+  nombre: Camara 3
+  temperatura_objetivo: 34
+- co2_objetivo: 3050
+  humedad_objetivo: 80
+  nombre: Camara 4
+  temperatura_objetivo: 33
+canchado:
+  velocidad_molino: 60
+modbus:
+  ip: 0.0.0.0
+  port: 5020
+  rate: 1
+mqtt:
+  broker: localhost
+  interval: 5
+  keepalive: 60
+  pass: ''
+  port: 1883
+  topic: yerba
+  user: ''
+opcua:
+  cert: ''
+  host: 0.0.0.0
+  interval: 2000
+  key: ''
+  mode: None
+  namespace: YerbaProcess
+  nombre: Yerba OPC UA Server
+  path: /yerba/
+  policy: None
+  port: 4840
+secado:
+  humedad: 30
+  temperatura: 90
+  velocidad_aire: 2.5
+simulacion:
+  aceleracion: 30
+zapecado:
+  temperatura_inicial: 450
+  velocidad_chip: 30
+  velocidad_tambor: 15
+limits:
+  temp_min: 10
+  temp_max: 120
+  hum_min: 5
+  hum_max: 95
+  co2_min: 400
+  co2_max: 8000
+  tau_camera: 600
+weather:
+  latitude: -27.48683
+  longitude: -55.11994
+  city: Oberá, Provincia de Misiones, Argentina
+  interval_seconds: 600
+persistence:
+  enabled: true
+  interval_seconds: 10

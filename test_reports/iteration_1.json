@@ -1,0 +1,24 @@
+{
+  "summary": "Full backend + frontend regression of the Yerba Mate digital twin. 20/20 pytest cases pass (state, services/status, history, controls for zapecado/secado/canchado/camaras, config GET/POST, weather GET/search/set-location, AI chat/anomalies/forecast via Gemini 3 Flash, data files+excel, websocket /api/ws). Frontend loads with 7 tabs and all 5 header badges (WS live, Modbus, MQTT, OPC UA, Clima) GREEN. All interactive flows verified: tab navigation, Zapecado slider → POST /api/zapecado (4 events), Cámaras carga/ventilador/temperatura_obj → POST /api/camaras/0 (3 events), AI chat returned 1212-char Spanish reply, Re-analizar anomalies surfaced diagnosis card, weather search 'Oberá' returns Misiones option which on click fires POST /api/weather/location and updates city; Guardar configuración fires POST /api/config and shows '✓ Guardado en config_yerba.yaml'.",
+  "backend_issues": {"critical": [], "minor": []},
+  "frontend_issues": {"ui_bugs": [], "integration_issues": [], "design_issues": []},
+  "test_report_links": [
+    "/app/backend/tests/test_yerba_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [],
+  "critical_code_review_comments": [
+    "server.py @api.post('/weather/location') uses HTTPException(500,...) when weather service is not initialized; 503 would be more semantic but not a blocker.",
+    "AIPanel.aiChat error path uses e?.response?.data?.detail which assumes axios; if api.js ever switches to fetch this will silently fall back to e.message - low-impact.",
+    "ConfigView.save() builds patch without weather/camaras keys (intentional, kept in their own endpoints), but loss of weather changes after Save can confuse the user since search-result click already persisted - consider showing the saved sections explicitly.",
+    "WebSocket loop in server.py has no client-side pong/keepalive; long-lived clients behind ingress (60s idle timeout) may drop. Since data flows every 1s this is masked."
+  ],
+  "updated_files": ["/app/backend/tests/test_yerba_api.py"],
+  "success_rate": {"backend": "100% (20/20)", "frontend": "100% of critical flows"},
+  "test_credentials": "n/a - no auth in this app",
+  "seed_data_creation": "None - simulator generates state in-memory; persistence files were already present (yerba_history_2026-05-18.csv pre-existing).",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Pytest suite at /app/backend/tests/test_yerba_api.py is the regression reference. MQTT badge will show ON because paho-mqtt connects async even without a real broker - this is documented behaviour. AI calls take 5-15s, allow generous timeouts. NumberInput component already has data-testid on the inner <input>, so selectors are page.fill('[data-testid=\"cam-0-tobj\"]', '36') NOT '[data-testid=\"cam-0-tobj\"] input'.",
+  "rca of the issue": "No bugs found."
+}
