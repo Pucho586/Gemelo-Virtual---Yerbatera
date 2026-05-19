@@ -60,9 +60,13 @@ export const api = {
   // FASE 4: Mass-flow (trazabilidad de masa entre etapas)
   massflowGet: () => http.get('/massflow').then(r => r.data),
   massflowCarga: (kg, T, H) => http.post('/massflow/carga', { kg, T, H }).then(r => r.data),
-  massflowTransferir: (de, a, kg) => http.post('/massflow/transferir', { de, a, kg }).then(r => r.data),
+  massflowTransferir: (de, a, kg, force = false) => http.post('/massflow/transferir', { de, a, kg, force }).then(r => r.data),
   massflowSetMerma: (stage, pct) => http.post('/massflow/merma', { stage, pct }).then(r => r.data),
+  massflowSetMinTime: (stage, seconds) => http.post('/massflow/min_time', { stage, seconds }).then(r => r.data),
   massflowReset: () => http.post('/massflow/reset').then(r => r.data),
+  // DOCS (manuales)
+  docsList: () => http.get('/docs').then(r => r.data),
+  docsGet: (name) => http.get(`/docs/${name}`).then(r => r.data),
   // Config
   getConfig: () => http.get('/config').then(r => r.data),
   patchConfig: (body) => http.post('/config', body).then(r => r.data),

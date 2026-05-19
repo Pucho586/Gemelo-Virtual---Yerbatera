@@ -48,6 +48,17 @@ React (frontend + auth JWT) ─┬─► FastAPI /api/* (REST + WebSocket)
 ### v2.2 — Industria 4.0 (iter 4) — 66/66 tests
 - Clientes Modbus + OPC UA + MQTT subscriber, modo Shadow, drift sim vs PLC, calibración por CSV, audit trail
 
+### v2.7 — UX clarity: readiness + presets + manual viewer + cámaras explicadas (iter 10) ★
+- **Mass-flow con readiness por etapa**:
+  - Cada etapa tiene `min_time_s` configurable (default: Recepción 0, Zapecado 8, Secado 60, Canchado 10, Estacionamiento 0)
+  - Badge visual "🟡 Procesando · Xs rest." → "🟢 Listo para pasar" + barra de progreso
+  - Botón → deshabilitado hasta listo, admin tiene botón "⚡ forzar" para saltear el tiempo
+  - Tabla unificada Merma % + Tiempo mín. (s) editable
+- **What-if con presets**: dropdown con 7 escenarios pre-armados ("Secado +10°C", "Throughput +20%", "Chips lento", etc). JSON queda como modo avanzado opcional.
+- **Manual desde el sistema**: botón "📖 Manual" en header → modal con sidebar de manuales + render markdown completo (estilos prose).
+- **Cámaras explicadas**: card "¿Cómo funcionan las cámaras de maduración?" al inicio con bullets de cada concepto (cantidad, ventilador, vapor, carga, días, CO₂).
+- **Endpoints nuevos**: `POST /api/massflow/min_time` (admin), `POST /api/massflow/transferir` acepta `force: bool`, `GET /api/docs`, `GET /api/docs/{name}`.
+
 ### v2.6 — Sensores derivados + Mermas editables + Visibilidad cruzada (iter 9) ★
 - **Sensores de campo derivados** en el snapshot del simulator:
   - Zapecado: termocupla K entrada (T gases), termocupla K salida (T yerba), capacitivo/NIR salida (H), vibrómetro

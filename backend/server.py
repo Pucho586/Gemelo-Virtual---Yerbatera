@@ -1060,11 +1060,17 @@ class TransferBody(BaseModel):
     de: str
     a: str
     kg: Optional[float] = None
+    force: Optional[bool] = False
 
 
 class MermaBody(BaseModel):
     stage: str
     pct: float
+
+
+class MinTimeBody(BaseModel):
+    stage: str
+    seconds: float
 
 
 @api.get("/massflow")
@@ -1092,11 +1098,27 @@ async def massflow_transferir(body: TransferBody, user=Depends(current_user_dep)
     rt = get_runtime()
     if not rt.mass_flow:
         raise HTTPException(503, "MassFlow no inicializado")
+    # Sólo admin puede forzar
+    force = bool(body.force)
+    if force and user.get("role") != "admin":
+        raise HTTPException(403, "Sólo admin puede forzar transferencia anticipada")
     try:
-        ev = rt.mass_flow.transferir(body.de, body.a, kg=body.kg, user=user["username"])
+        ev = rt.mass_flow.transferir(body.de, body.a, kg=body.kg, user=user["username"], force=force)
     except ValueError as e:
         raise HTTPException(400, str(e))
     return ev
+
+
+@api.post("/massflow/min_time")
+async def massflow_set_min_time(body: MinTimeBody, user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.mass_flow:
+        raise HTTPException(503, "MassFlow no inicializado")
+    try:
+        rt.mass_flow.set_min_time(body.stage, body.seconds)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return rt.mass_flow.snapshot()
 
 
 @api.post("/massflow/merma")
@@ -1118,6 +1140,42 @@ async def massflow_reset(user=Depends(admin_only)):
         raise HTTPException(503, "MassFlow no inicializado")
     rt.mass_flow.reset()
     return rt.mass_flow.snapshot()
+
+
+# ============================ DOCS (manuales del sistema) ============================
+
+import os as _os
+_DOCS_DIR = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), "docs")
+
+
+@api.get("/docs")
+async def docs_list():
+    """Lista los manuales disponibles."""
+    if not _os.path.isdir(_DOCS_DIR):
+        return []
+    files = []
+    for fn in sorted(_os.listdir(_DOCS_DIR)):
+        if fn.endswith(".md"):
+            path = _os.path.join(_DOCS_DIR, fn)
+            files.append({
+                "name": fn,
+                "size": _os.path.getsize(path),
+                "title": fn.replace(".md", "").replace("_", " ").title(),
+            })
+    return files
+
+
+@api.get("/docs/{name}")
+async def docs_get(name: str):
+    """Devuelve el contenido markdown de un manual."""
+    # Sanitize: no path traversal
+    if "/" in name or ".." in name or not name.endswith(".md"):
+        raise HTTPException(400, "Nombre inválido")
+    path = _os.path.join(_DOCS_DIR, name)
+    if not _os.path.isfile(path):
+        raise HTTPException(404, "Documento no encontrado")
+    with open(path, "r", encoding="utf-8") as f:
+        return {"name": name, "content": f.read()}
 
 
 app.include_router(api)

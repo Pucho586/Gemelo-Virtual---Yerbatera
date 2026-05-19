@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Btn, NumberInput, SectionTitle, Metric } from './UI';
 import { api } from '../lib/api';
 import { useAuth, isAdmin } from '../lib/auth';
-import { ArrowRight, Leaf, Thermometer, Drop, Scales, FlowArrow, ArrowsClockwise } from '@phosphor-icons/react';
+import { ArrowRight, Leaf, Thermometer, Drop, Scales, FlowArrow, ArrowsClockwise, Clock, CheckCircle, Lightning } from '@phosphor-icons/react';
 
 const STAGE_INFO = {
   recepcion: { label: 'Recepción', desc: 'Pesaje de hoja verde (50-55% hum)', color: '#86EFAC' },
@@ -44,12 +44,15 @@ export default function MassFlowView() {
     finally { setLoading(false); }
   };
 
-  const transferir = async (de, a) => {
+  const transferir = async (de, a, force = false) => {
     setErr('');
     try {
-      await api.massflowTransferir(de, a);
+      await api.massflowTransferir(de, a, null, force);
       refresh();
-    } catch (e) { setErr(e?.response?.data?.detail || 'Error'); }
+    } catch (e) {
+      const msg = e?.response?.data?.detail || 'Error';
+      setErr(msg);
+    }
   };
 
   const resetAll = async () => {
@@ -68,9 +71,13 @@ export default function MassFlowView() {
       <Card className="p-5" testid="massflow-info">
         <SectionTitle kicker="01">Trazabilidad de masa por etapa</SectionTitle>
         <p className="text-sm text-slate-400 mt-2">
-          Cargá hoja verde en Recepción y movela manualmente a cada etapa con el botón <span className="text-amber-300 font-mono">→</span>.
-          Cada transferencia aplica la merma típica de la etapa de origen y hereda T y H de salida (medidos por los sensores reales) como
-          condiciones de entrada de la etapa siguiente.
+          Cargá hoja verde en Recepción y movela paso a paso con el botón <span className="text-green-400 font-mono">→</span>. Cada etapa tiene
+          un <span className="text-amber-300">tiempo mínimo de procesamiento</span> antes de habilitar el pase a la siguiente; mientras se procesa
+          ves <span className="text-amber-300">"Procesando..."</span> con barra de avance, y cuando termina cambia a <span className="text-green-400">"Listo para pasar"</span>.
+        </p>
+        <p className="text-xs text-slate-500 font-mono mt-2 leading-relaxed">
+          Al transferir: se aplica la merma típica de la etapa origen, y la T y H de salida (medidos por sensores) pasan como condición de
+          entrada de la siguiente. Si necesitás saltear el tiempo (sólo entrenamiento), admin tiene un botón <span className="text-amber-300">forzar</span>.
         </p>
       </Card>
 
@@ -98,41 +105,64 @@ export default function MassFlowView() {
       {/* Editor de mermas (admin) */}
       {admin && (
         <Card className="p-5" testid="massflow-mermas-editor">
-          <SectionTitle kicker="02b">Mermas por etapa (%)</SectionTitle>
+          <SectionTitle kicker="02b">Mermas y tiempos por etapa</SectionTitle>
           <p className="text-[11px] font-mono text-slate-500 mt-1">
-            Ajustá la merma típica de cada paso. Default INYM: 0 / 35 / 22 / 4 / 0.5 %.
+            <span className="text-amber-300">Merma %</span>: pérdida típica al transferir. <span className="text-amber-300">Tiempo mín. (s)</span>: cuánto debe procesarse antes de habilitar el pase.
           </p>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-3">
-            {order.map((stage) => (
-              <div key={stage}>
-                <label className="text-[10px] font-mono uppercase tracking-wider text-slate-500">
-                  {STAGE_INFO[stage]?.label || stage}
-                </label>
-                <div className="flex items-center gap-1 mt-1">
-                  <input
-                    type="number"
-                    step="0.5"
-                    min="0"
-                    max="95"
-                    value={(data.merma_pct[stage] * 100).toFixed(1)}
-                    onChange={(e) => {
-                      const newPct = Math.max(0, Math.min(95, Number(e.target.value))) / 100;
-                      api.massflowSetMerma(stage, newPct).then(refresh).catch((er) => setErr(er?.response?.data?.detail || 'Error'));
-                    }}
-                    className="field w-full font-mono text-xs"
-                    data-testid={`merma-${stage}`}
-                  />
-                  <span className="text-xs font-mono text-slate-500">%</span>
-                </div>
-              </div>
-            ))}
+          <div className="overflow-x-auto mt-3">
+            <table className="w-full text-xs font-mono">
+              <thead>
+                <tr className="border-b" style={{ borderColor: 'var(--border)' }}>
+                  <th className="text-left px-2 py-2 text-[10px] uppercase text-slate-500">Etapa</th>
+                  <th className="text-right px-2 py-2 text-[10px] uppercase text-slate-500">Merma %</th>
+                  <th className="text-right px-2 py-2 text-[10px] uppercase text-slate-500">Tiempo mín. (s)</th>
+                </tr>
+              </thead>
+              <tbody>
+                {order.map((stage) => (
+                  <tr key={stage} className="border-b last:border-b-0" style={{ borderColor: 'var(--border)' }}>
+                    <td className="px-2 py-1.5 text-slate-200">{STAGE_INFO[stage]?.label || stage}</td>
+                    <td className="px-2 py-1.5 text-right">
+                      <input
+                        type="number"
+                        step="0.5"
+                        min="0"
+                        max="95"
+                        value={(data.merma_pct[stage] * 100).toFixed(1)}
+                        onChange={(e) => {
+                          const newPct = Math.max(0, Math.min(95, Number(e.target.value))) / 100;
+                          api.massflowSetMerma(stage, newPct).then(refresh).catch((er) => setErr(er?.response?.data?.detail || 'Error'));
+                        }}
+                        className="field w-24 font-mono text-xs text-right"
+                        data-testid={`merma-${stage}`}
+                      />
+                    </td>
+                    <td className="px-2 py-1.5 text-right">
+                      <input
+                        type="number"
+                        step="1"
+                        min="0"
+                        max="3600"
+                        value={data.min_time_s?.[stage] || 0}
+                        onChange={(e) => {
+                          const secs = Math.max(0, Math.min(3600, Number(e.target.value)));
+                          api.massflowSetMinTime(stage, secs).then(refresh).catch((er) => setErr(er?.response?.data?.detail || 'Error'));
+                        }}
+                        className="field w-24 font-mono text-xs text-right"
+                        data-testid={`mintime-${stage}`}
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
       )}
 
       {/* Pipeline visual */}
       <Card className="p-0" testid="massflow-pipeline">
-        <CardHeader title="Pipeline en vivo" subtitle="kg actual, acumulados, T y H de cada etapa · refrescado cada 3s" />
+        <CardHeader title="Pipeline en vivo" subtitle="Cada etapa procesa un tiempo mínimo antes de habilitar el botón → · refrescado cada 3s" />
         <div className="p-4 overflow-x-auto">
           <div className="flex items-stretch gap-2 min-w-max">
             {order.map((stage, i) => {
@@ -140,14 +170,51 @@ export default function MassFlowView() {
               const info = STAGE_INFO[stage] || { label: stage, desc: '', color: 'var(--amber)' };
               const merma_pct = data.merma_pct[stage] || 0;
               const nextStage = order[i + 1];
+              const isReady = s.ready;
+              const hasMass = s.kg_actual > 0;
+              const procS = s.processing_seconds || 0;
+              const minT = s.min_time_s || 0;
+              const remaining = Math.max(0, minT - procS);
+              const showProgress = hasMass && minT > 0;
+
               return (
                 <React.Fragment key={stage}>
-                  <div className="surface p-4 min-w-[220px] flex-1" data-testid={`stage-${stage}`}>
+                  <div className="surface p-4 min-w-[220px] flex-1 relative" data-testid={`stage-${stage}`}>
                     <div className="flex items-center justify-between mb-2">
                       <div className="font-display text-sm font-medium" style={{ color: info.color }}>{info.label}</div>
                       <span className="text-[10px] font-mono text-slate-500">#{i + 1}</span>
                     </div>
                     <p className="text-[10px] font-mono text-slate-500 mb-3 leading-snug">{info.desc}</p>
+
+                    {/* BADGE de estado */}
+                    {hasMass && (
+                      <div className={`mb-3 inline-flex items-center gap-1 px-2 py-1 font-mono text-[10px] border ${isReady
+                        ? 'bg-green-500/10 text-green-300 border-green-500/40'
+                        : 'bg-amber-500/10 text-amber-300 border-amber-500/40'}`} data-testid={`stage-${stage}-status`}>
+                        {isReady ? <><CheckCircle size={10} weight="fill"/> Listo para pasar</>
+                                  : <><Clock size={10}/> Procesando · {Math.ceil(remaining)}s rest.</>}
+                      </div>
+                    )}
+                    {!hasMass && (
+                      <div className="mb-3 inline-flex items-center gap-1 px-2 py-1 font-mono text-[10px] border bg-slate-500/10 text-slate-400 border-slate-500/30">
+                        Sin masa
+                      </div>
+                    )}
+
+                    {/* Barra de progreso */}
+                    {showProgress && (
+                      <div className="mb-3">
+                        <div className="h-1.5 bg-slate-800 border border-slate-700 overflow-hidden">
+                          <div
+                            className={`h-full transition-all duration-1000 ${isReady ? 'bg-green-400' : 'bg-amber-400'}`}
+                            style={{ width: `${s.progress_pct || 0}%` }}
+                            data-testid={`stage-${stage}-progress`}
+                          />
+                        </div>
+                        <div className="font-mono text-[9px] text-slate-500 mt-0.5">{Math.floor(procS)}s / {Math.floor(minT)}s</div>
+                      </div>
+                    )}
+
                     <div className="space-y-1.5">
                       <div className="flex justify-between font-mono text-xs">
                         <span className="text-slate-500">kg actual</span>
@@ -179,14 +246,35 @@ export default function MassFlowView() {
                       <button
                         data-testid={`xfer-${stage}-${nextStage}`}
                         onClick={() => transferir(stage, nextStage)}
-                        disabled={s.kg_actual <= 0}
-                        className="px-2 py-3 border text-amber-300 hover:bg-amber-500/10 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                        style={{ borderColor: 'var(--border)' }}
-                        title={`Transferir ${s.kg_actual.toFixed(0)} kg a ${STAGE_INFO[nextStage]?.label}`}
+                        disabled={s.kg_actual <= 0 || !isReady}
+                        className={`px-2 py-3 border transition-colors disabled:cursor-not-allowed ${
+                          s.kg_actual > 0 && isReady
+                            ? 'text-green-400 border-green-500/40 hover:bg-green-500/10'
+                            : 'text-slate-600 border-slate-700 opacity-40'
+                        }`}
+                        title={
+                          s.kg_actual <= 0 ? 'Sin masa para pasar'
+                          : !isReady ? `Procesando... falta ${Math.ceil(remaining)}s`
+                          : `Transferir ${s.kg_actual.toFixed(0)} kg a ${STAGE_INFO[nextStage]?.label}`
+                        }
                       >
                         <ArrowRight size={16}/>
                       </button>
                       <span className="text-[9px] font-mono text-slate-600">pasar</span>
+                      {admin && hasMass && !isReady && (
+                        <button
+                          data-testid={`xfer-force-${stage}-${nextStage}`}
+                          onClick={() => {
+                            if (window.confirm(`¿Forzar transferencia ANTES de terminar?\n\nNo es realista — usar sólo para entrenamiento o ajustes.`)) {
+                              transferir(stage, nextStage, true);
+                            }
+                          }}
+                          className="px-1.5 py-0.5 border text-[9px] font-mono text-amber-300 border-amber-500/40 hover:bg-amber-500/10"
+                          title="Sólo admin: saltea el tiempo de procesamiento"
+                        >
+                          <Lightning size={8} className="inline"/> forzar
+                        </button>
+                      )}
                     </div>
                   )}
                 </React.Fragment>

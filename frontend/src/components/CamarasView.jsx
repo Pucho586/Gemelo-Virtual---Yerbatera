@@ -106,6 +106,27 @@ export default function CamarasView({ state, series, mimicStyle = 'svg' }) {
 
   return (
     <div className="space-y-px">
+      <Card className="p-5" testid="camaras-explain">
+        <SectionTitle kicker="?">¿Cómo funcionan las cámaras de maduración?</SectionTitle>
+        <p className="text-sm text-slate-300 mt-2 leading-relaxed">
+          Después del canchado, la yerba pasa al <span className="text-amber-300">estacionamiento</span>: se acopia en cámaras controladas durante
+          semanas o meses para que pierda el sabor "verde" y desarrolle aroma. El gemelo te deja:
+        </p>
+        <ul className="text-xs text-slate-400 font-mono mt-3 space-y-1.5 pl-3">
+          <li>• <span className="text-green-400">Cantidad de cámaras</span>: 1 a 12 (botones +/- arriba a la derecha). Cuando transferís yerba al
+              estacionamiento, los kg se reparten en la cámara con menor carga (load balancing).</li>
+          <li>• <span className="text-green-400">Ventilador</span> (modo natural): mueve el aire dentro de la cámara para acercarla a su setpoint de T y HR.</li>
+          <li>• <span className="text-cyan-300">Inyección de vapor</span> (modo acelerado): toggle ON + caudal en kg/h. Fuerza la cámara hacia un
+              setpoint propio mucho más rápido (60-180s vs 600s del modo natural). Útil para simular maduración acelerada con caldera + serpentín.</li>
+          <li>• <span className="text-blue-300">Carga (kg)</span>: cantidad de yerba dentro. Se incrementa al transferir desde Canchado o manualmente.</li>
+          <li>• <span className="text-violet-300">Días maduración</span>: tiempo acumulado con carga &gt; 0 (en días simulados).</li>
+          <li>• <span className="text-amber-300">CO₂ (ppm)</span>: la yerba respira durante el añejado, sube el CO₂ si no se ventila.</li>
+        </ul>
+        <p className="text-[11px] font-mono text-slate-500 mt-3 leading-relaxed">
+          Los sensores reales (PT100 doble, NDIR, caudalímetro de vapor) se muestran dentro de cada card de cámara.
+        </p>
+      </Card>
+
       <Card className="p-0" testid="camaras-chart-card">
         <CardHeader
           title="Cámaras · Comparativa en tiempo real"

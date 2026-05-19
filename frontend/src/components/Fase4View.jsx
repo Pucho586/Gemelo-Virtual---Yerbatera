@@ -145,12 +145,59 @@ function ReplayPanel({ admin }) {
 }
 
 // ============================ WHAT-IF ============================
+const WHATIF_PRESETS = [
+  {
+    id: 'sec_alta',
+    name: 'Secado +10°C',
+    desc: 'Sube setpoint del secadero · busca acelerar el proceso',
+    overrides: { secado: { velocidad_aire: 0.85 } },
+  },
+  {
+    id: 'sec_baja',
+    name: 'Secado -10°C',
+    desc: 'Baja temperatura del secadero · ahorro energético',
+    overrides: { secado: { velocidad_aire: 0.55 } },
+  },
+  {
+    id: 'throughput_up',
+    name: 'Throughput +20%',
+    desc: 'Más kg/h en la planta · ver impacto en OEE y costo/kg',
+    overrides: { simulacion: { throughput_kgh: 600 } },
+  },
+  {
+    id: 'throughput_down',
+    name: 'Throughput -20%',
+    desc: 'Menos carga · útil para revisar calidad cuando hay alarmas',
+    overrides: { simulacion: { throughput_kgh: 400 } },
+  },
+  {
+    id: 'chips_lento',
+    name: 'Chips lento',
+    desc: 'Menor velocidad de chips en zapecado · más tiempo de residencia',
+    overrides: { zapecado: { velocidad_chip: 15 } },
+  },
+  {
+    id: 'chips_rapido',
+    name: 'Chips rápido',
+    desc: 'Mayor velocidad de chips · menos tiempo, más merma',
+    overrides: { zapecado: { velocidad_chip: 30 } },
+  },
+  {
+    id: 'molino_lento',
+    name: 'Molino lento',
+    desc: 'Canchador a baja rpm · partícula más gruesa',
+    overrides: { canchado: { velocidad_molino: 800 } },
+  },
+];
+
 function WhatIfPanel({ admin }) {
   const [scenarios, setScenarios] = useState([]);
   const [newName, setNewName] = useState('');
-  const [newOverridesJson, setNewOverridesJson] = useState('{\n  "secado": { "temperatura_setpoint": 105 },\n  "throughput_kgh": 600\n}');
+  const [newOverridesJson, setNewOverridesJson] = useState('{}');
   const [creating, setCreating] = useState(false);
   const [baselineState, setBaselineState] = useState(null);
+  const [showJson, setShowJson] = useState(false);
+  const [presetId, setPresetId] = useState('');
 
   const refresh = () => Promise.all([
     api.whatifList().then(setScenarios).catch(() => {}),
@@ -218,46 +265,91 @@ function WhatIfPanel({ admin }) {
       {admin && (
         <Card className="p-5" testid="whatif-create">
           <SectionTitle kicker="02">Crear escenario</SectionTitle>
-          <div className="mt-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-            <TextInput testid="whatif-name" label="Nombre" value={newName} onChange={setNewName} placeholder="Ej: Secado a 105°C" />
-            <div className="md:col-span-2">
-              <label className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Overrides (JSON · ej: {`{"zapecado":{"velocidad_chip":20}}`})</label>
-              <textarea
-                data-testid="whatif-overrides-json"
-                className="field w-full mt-1 font-mono text-xs"
-                rows={5}
-                value={newOverridesJson}
-                onChange={(e) => setNewOverridesJson(e.target.value)}
-              />
+          <p className="text-[11px] font-mono text-slate-500 mt-1">
+            Lo más simple: elegí un <span className="text-amber-300">preset</span>, ponele un nombre, y dale <span className="text-green-400">Crear</span>.
+            Si querés un JSON personalizado, abrí "Editar JSON".
+          </p>
+
+          <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-mono uppercase tracking-wider text-slate-500">1. Elegí un preset</label>
+              <select
+                data-testid="whatif-preset"
+                className="field w-full mt-1"
+                value={presetId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setPresetId(id);
+                  const p = WHATIF_PRESETS.find(x => x.id === id);
+                  if (p) {
+                    setNewName(p.name);
+                    setNewOverridesJson(JSON.stringify(p.overrides, null, 2));
+                  }
+                }}
+              >
+                <option value="">— Elegí un preset —</option>
+                {WHATIF_PRESETS.map(p => (
+                  <option key={p.id} value={p.id}>{p.name} · {p.desc}</option>
+                ))}
+              </select>
+              {presetId && (
+                <p className="text-[10px] font-mono text-slate-500 mt-1.5 leading-relaxed">
+                  {WHATIF_PRESETS.find(p => p.id === presetId)?.desc}
+                </p>
+              )}
             </div>
-            <div className="md:col-span-3 flex flex-wrap items-center gap-2">
-              <p className="text-[11px] font-mono text-slate-500 flex-1 min-w-[180px]">Máximo 3 escenarios paralelos. Cambiar requiere borrar primero.</p>
-              <Btn testid="whatif-snapshot-btn" variant="secondary" onClick={async () => {
-                  if (!newName.trim()) { alert('Asigná un nombre antes del snapshot'); return; }
-                  if (scenarios.length >= 3) { alert('Ya tenés 3 escenarios. Borrá alguno.'); return; }
-                  let extra = {};
-                  try { if (newOverridesJson.trim()) extra = JSON.parse(newOverridesJson); }
-                  catch (e) { alert('JSON inválido en overrides: ' + e.message); return; }
-                  setCreating(true);
-                  try {
-                    await api.whatifSnapshot(newName.trim(), extra);
-                    setNewName('');
-                    refresh();
-                  } catch (e) { alert(e?.response?.data?.detail || 'Error'); }
-                  finally { setCreating(false); }
-                }} disabled={creating || scenarios.length >= 3}>
-                <span className="inline-flex items-center gap-1">📸 Snapshot baseline → escenario</span>
-              </Btn>
-              {scenarios.length > 0 && <Btn testid="whatif-reset-all" variant="secondary" onClick={resetAll}><span className="inline-flex items-center gap-1"><Trash size={12}/> Reset todos</span></Btn>}
-              <Btn testid="whatif-create-btn" onClick={create} disabled={creating || scenarios.length >= 3}>
-                <span className="inline-flex items-center gap-1"><Plus size={12}/> {creating ? 'Creando...' : 'Crear escenario'}</span>
-              </Btn>
-            </div>
-            <p className="md:col-span-3 text-[10px] font-mono text-slate-500 leading-relaxed">
-              <span className="text-amber-300">Snapshot</span>: captura el estado actual del baseline (setpoints de zapecado, secado, canchado, throughput)
-              como punto de partida. Tu JSON de overrides se mergea por encima — sólo sobreescribís lo que querés cambiar.
-            </p>
+            <TextInput testid="whatif-name" label="2. Nombre del escenario" value={newName} onChange={setNewName} placeholder="Ej: Prueba secado bajo" />
           </div>
+
+          <div className="mt-3">
+            <button
+              onClick={() => setShowJson(s => !s)}
+              data-testid="whatif-toggle-json"
+              className="text-[10px] font-mono text-amber-300 hover:text-amber-200 underline"
+            >
+              {showJson ? '▲ Ocultar JSON' : '▼ Editar JSON (avanzado)'}
+            </button>
+            {showJson && (
+              <div className="mt-2">
+                <label className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Overrides JSON</label>
+                <textarea
+                  data-testid="whatif-overrides-json"
+                  className="field w-full mt-1 font-mono text-xs"
+                  rows={6}
+                  value={newOverridesJson}
+                  onChange={(e) => setNewOverridesJson(e.target.value)}
+                />
+              </div>
+            )}
+          </div>
+
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <p className="text-[11px] font-mono text-slate-500 flex-1 min-w-[180px]">Máximo 3 escenarios paralelos.</p>
+            <Btn testid="whatif-snapshot-btn" variant="secondary" onClick={async () => {
+                if (!newName.trim()) { alert('Asigná un nombre antes del snapshot'); return; }
+                if (scenarios.length >= 3) { alert('Ya tenés 3 escenarios. Borrá alguno.'); return; }
+                let extra = {};
+                try { if (newOverridesJson.trim()) extra = JSON.parse(newOverridesJson); }
+                catch (e) { alert('JSON inválido: ' + e.message); return; }
+                setCreating(true);
+                try {
+                  await api.whatifSnapshot(newName.trim(), extra);
+                  setNewName(''); setPresetId(''); setNewOverridesJson('{}');
+                  refresh();
+                } catch (e) { alert(e?.response?.data?.detail || 'Error'); }
+                finally { setCreating(false); }
+              }} disabled={creating || scenarios.length >= 3}>
+              <span className="inline-flex items-center gap-1">📸 Snapshot baseline + override</span>
+            </Btn>
+            {scenarios.length > 0 && <Btn testid="whatif-reset-all" variant="secondary" onClick={resetAll}><span className="inline-flex items-center gap-1"><Trash size={12}/> Reset todos</span></Btn>}
+            <Btn testid="whatif-create-btn" onClick={create} disabled={creating || scenarios.length >= 3 || !newName.trim()}>
+              <span className="inline-flex items-center gap-1"><Plus size={12}/> {creating ? 'Creando...' : 'Crear escenario'}</span>
+            </Btn>
+          </div>
+          <p className="text-[10px] font-mono text-slate-500 leading-relaxed mt-2">
+            <span className="text-amber-300">Crear</span> usa los defaults del config para todo + tu override.
+            <span className="text-amber-300"> Snapshot</span> captura los setpoints actuales del baseline (lo que está corriendo ahora) y aplica encima tu override.
+          </p>
         </Card>
       )}
 

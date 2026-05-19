@@ -18,7 +18,8 @@ import Industria40View from './components/Industria40View';
 import OperacionesView from './components/OperacionesView';
 import Fase4View from './components/Fase4View';
 import MassFlowView from './components/MassFlowView';
-import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow } from '@phosphor-icons/react';
+import DocsModal from './components/DocsModal';
+import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen } from '@phosphor-icons/react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', Icon: House, role: 'any' },
@@ -46,6 +47,7 @@ function AuthedApp() {
   const [mimicStyle, setMimicStyle] = useState(() => {
     try { return localStorage.getItem('yerba_mimic') || 'svg'; } catch (e) { return 'svg'; }
   });
+  const [docsOpen, setDocsOpen] = useState(false);
 
   useEffect(() => {
     const fetch = () => Promise.all([
@@ -128,6 +130,9 @@ function AuthedApp() {
             <button onClick={toggleMimic} className="text-xs font-mono text-slate-400 hover:text-amber-300 transition-colors border border-[#232A26] px-2 py-1" data-testid="mimic-toggle" title="Estilo de mímicos">
               {mimicStyle === 'svg' ? 'SVG' : 'P&ID'}
             </button>
+            <button onClick={() => setDocsOpen(true)} className="inline-flex items-center gap-1 text-xs font-mono text-amber-300 hover:text-amber-200 transition-colors border border-amber-500/40 px-2 py-1" data-testid="docs-open-btn" title="Manuales del sistema">
+              <BookOpen size={12} /> Manual
+            </button>
             <button onClick={logout} className="inline-flex items-center gap-1 text-xs font-mono text-slate-400 hover:text-red-400 transition-colors border border-[#232A26] px-2 py-1" data-testid="logout-btn">
               <SignOut size={12} /> Salir
             </button>
@@ -174,6 +179,7 @@ function AuthedApp() {
           <span>{state?.ts ? new Date(state.ts).toLocaleTimeString() : '–'}</span>
         </div>
       </footer>
+      {docsOpen && <DocsModal onClose={() => setDocsOpen(false)} />}
     </div>
   );
 }

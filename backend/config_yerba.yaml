@@ -1,7 +1,7 @@
 camaras:
 - nombre: Camara 1
   temperatura_objetivo: 30.0
-  humedad_objetivo: 75.0
+  humedad_objetivo: 5.0
   co2_objetivo: 2800.0
   vapor_activo: true
   vapor_caudal_kgh: 30.0
@@ -17,20 +17,12 @@ camaras:
   vapor_setpoint_hum: 70.0
 - nombre: Camara 3
   temperatura_objetivo: 30.0
-  humedad_objetivo: 75.0
+  humedad_objetivo: 5.0
   co2_objetivo: 2800.0
-  vapor_activo: false
+  vapor_activo: true
   vapor_caudal_kgh: 0.0
   vapor_setpoint_temp: 34.0
   vapor_setpoint_hum: 78.0
-- nombre: Camara 4
-  temperatura_objetivo: 35.0
-  humedad_objetivo: 75.0
-  co2_objetivo: 3000.0
-  vapor_activo: false
-  vapor_caudal_kgh: 0.0
-  vapor_setpoint_temp: 35.0
-  vapor_setpoint_hum: 75.0
 canchado:
   velocidad_molino: 60
 modbus:
