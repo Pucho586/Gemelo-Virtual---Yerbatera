@@ -17,10 +17,12 @@ import LotesView from './components/LotesView';
 import Industria40View from './components/Industria40View';
 import OperacionesView from './components/OperacionesView';
 import Fase4View from './components/Fase4View';
-import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask } from '@phosphor-icons/react';
+import MassFlowView from './components/MassFlowView';
+import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow } from '@phosphor-icons/react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', Icon: House, role: 'any' },
+  { id: 'massflow', label: 'Flujo de masa', Icon: FlowArrow, role: 'any' },
   { id: 'zapecado', label: 'Zapecado', Icon: Fire, role: 'any' },
   { id: 'secado', label: 'Secado', Icon: Drop, role: 'any' },
   { id: 'canchado', label: 'Canchado', Icon: Cube, role: 'any' },
@@ -150,6 +152,7 @@ function AuthedApp() {
       {/* TABS PERSISTENTES: todas montadas, solo se oculta con CSS */}
       <main className="max-w-[1920px] mx-auto p-4 sm:p-6 lg:p-8" data-testid="main-content">
         <div style={{ display: tab === 'dashboard' ? 'block' : 'none' }}><Dashboard state={state} series={series} status={status} /></div>
+        <div style={{ display: tab === 'massflow' ? 'block' : 'none' }}><MassFlowView /></div>
         <div style={{ display: tab === 'zapecado' ? 'block' : 'none' }}><ZapecadoView state={state} series={series} mimicStyle={mimicStyle} /></div>
         <div style={{ display: tab === 'secado' ? 'block' : 'none' }}><SecadoView state={state} series={series} mimicStyle={mimicStyle} /></div>
         <div style={{ display: tab === 'canchado' ? 'block' : 'none' }}><CanchadoView state={state} series={series} mimicStyle={mimicStyle} /></div>

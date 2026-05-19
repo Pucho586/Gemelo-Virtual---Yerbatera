@@ -226,7 +226,7 @@ function MaintPanel({ admin }) {
   if (!data) return <div className="p-10 text-slate-500 font-mono">Cargando...</div>;
   const items = data.items || [];
   const components = Array.from(new Set(items.map(i => i.componente)));
-  const actions = ['lubricacion', 'rulemanes', 'overhaul'];
+  const actions = ['lubricacion', 'rodamientos', 'overhaul'];
 
   return (
     <div className="space-y-px">
@@ -266,7 +266,7 @@ function MaintPanel({ admin }) {
             {!editThr && <Btn testid="maint-thr-edit" variant="secondary" onClick={startEditThr}>Editar</Btn>}
           </div>
           {!editThr ? (
-            <p className="text-xs text-slate-500 font-mono">Ajustá las horas de marcha que disparan lubricación, cambio de rulemanes y overhaul por componente.</p>
+            <p className="text-xs text-slate-500 font-mono">Ajustá las horas de marcha que disparan lubricación, cambio de rodamientos y overhaul por componente.</p>
           ) : (
             <div className="space-y-3">
               <div className="grid grid-cols-4 gap-2 px-2 py-1 border-b font-mono text-[10px] uppercase tracking-wider text-slate-500" style={{ borderColor: 'var(--border)' }}>

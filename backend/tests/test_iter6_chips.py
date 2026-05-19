@@ -96,7 +96,7 @@ def test_set_shifts_requires_admin():
 
 # ---- POST /api/maintenance/thresholds ----
 def test_set_thresholds_persists(admin_headers):
-    payload = {"thresholds": {"tambor_zapecado": {"lubricacion": 600, "rulemanes": 2500}}}
+    payload = {"thresholds": {"tambor_zapecado": {"lubricacion": 600, "rodamientos": 2500}}}
     r = requests.post(f"{API}/maintenance/thresholds", json=payload, headers=admin_headers, timeout=15)
     assert r.status_code == 200, r.text
     m = requests.get(f"{API}/maintenance", timeout=15).json()
@@ -105,11 +105,11 @@ def test_set_thresholds_persists(admin_headers):
     assert item is not None
     assert item["umbral_h"] == 600
     item2 = next((x for x in m["items"]
-                  if x["componente"] == "tambor_zapecado" and x["accion"] == "rulemanes"), None)
+                  if x["componente"] == "tambor_zapecado" and x["accion"] == "rodamientos"), None)
     assert item2["umbral_h"] == 2500
     # restore defaults
     requests.post(f"{API}/maintenance/thresholds",
-                  json={"thresholds": {"tambor_zapecado": {"lubricacion": 500, "rulemanes": 2000}}},
+                  json={"thresholds": {"tambor_zapecado": {"lubricacion": 500, "rodamientos": 2000}}},
                   headers=admin_headers, timeout=15)
 
 

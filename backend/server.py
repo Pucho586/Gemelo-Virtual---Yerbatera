@@ -986,6 +986,46 @@ async def whatif_reset_all(user=Depends(admin_only)):
     return {"ok": True}
 
 
+class WhatIfSnapshotBody(BaseModel):
+    name: str
+    extra_overrides: Dict[str, Any] = {}
+
+
+@api.post("/whatif/snapshot")
+async def whatif_snapshot(body: WhatIfSnapshotBody, user=Depends(admin_only)):
+    """Captura el estado actual del baseline y crea un escenario what-if con esos valores
+    como punto de partida. extra_overrides permite ajustar lo que se quiera cambiar."""
+    rt = get_runtime()
+    if not rt.whatif:
+        raise HTTPException(503, "What-if no inicializado")
+    s = rt.simulator
+    overrides = {
+        "zapecado": {
+            "velocidad_chip": s.zapecado.velocidad_chip,
+            "velocidad_tambor": s.zapecado.velocidad_tambor,
+        },
+        "secado": {
+            "velocidad_aire": s.secado.velocidad_aire,
+        },
+        "canchado": {
+            "velocidad_molino": s.canchado.velocidad_molino,
+        },
+        "simulacion": {
+            "throughput_kgh": s.throughput_kgh,
+        },
+    }
+    for section, fields in (body.extra_overrides or {}).items():
+        if isinstance(fields, dict):
+            overrides.setdefault(section, {}).update(fields)
+        else:
+            overrides[section] = fields
+    try:
+        sc = rt.whatif.create(body.name, overrides)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return sc.to_dict()
+
+
 @api.post("/whatif/{scenario_id}")
 async def whatif_update(scenario_id: str, body: WhatIfUpdateBody, user=Depends(admin_only)):
     rt = get_runtime()
@@ -1006,6 +1046,78 @@ async def whatif_delete(scenario_id: str, user=Depends(admin_only)):
     if not ok:
         raise HTTPException(404, "Escenario no encontrado")
     return {"ok": True}
+
+
+# ============================ FASE 4: MASS FLOW (carga + transferencias) ============================
+
+class HojaVerdeBody(BaseModel):
+    kg: float
+    T: Optional[float] = None
+    H: Optional[float] = None
+
+
+class TransferBody(BaseModel):
+    de: str
+    a: str
+    kg: Optional[float] = None
+
+
+class MermaBody(BaseModel):
+    stage: str
+    pct: float
+
+
+@api.get("/massflow")
+async def massflow_get():
+    rt = get_runtime()
+    if not rt.mass_flow:
+        raise HTTPException(503, "MassFlow no inicializado")
+    return rt.mass_flow.snapshot()
+
+
+@api.post("/massflow/carga")
+async def massflow_carga(body: HojaVerdeBody, user=Depends(current_user_dep)):
+    rt = get_runtime()
+    if not rt.mass_flow:
+        raise HTTPException(503, "MassFlow no inicializado")
+    try:
+        res = rt.mass_flow.cargar_hoja_verde(body.kg, T=body.T, H=body.H, user=user["username"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return res
+
+
+@api.post("/massflow/transferir")
+async def massflow_transferir(body: TransferBody, user=Depends(current_user_dep)):
+    rt = get_runtime()
+    if not rt.mass_flow:
+        raise HTTPException(503, "MassFlow no inicializado")
+    try:
+        ev = rt.mass_flow.transferir(body.de, body.a, kg=body.kg, user=user["username"])
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return ev
+
+
+@api.post("/massflow/merma")
+async def massflow_set_merma(body: MermaBody, user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.mass_flow:
+        raise HTTPException(503, "MassFlow no inicializado")
+    try:
+        rt.mass_flow.set_merma(body.stage, body.pct)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return rt.mass_flow.snapshot()
+
+
+@api.post("/massflow/reset")
+async def massflow_reset(user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.mass_flow:
+        raise HTTPException(503, "MassFlow no inicializado")
+    rt.mass_flow.reset()
+    return rt.mass_flow.snapshot()
 
 
 app.include_router(api)

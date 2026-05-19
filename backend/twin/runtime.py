@@ -16,6 +16,7 @@ from .external_sources import (
 from .mqtt_publisher import YerbaMqttPublisher
 from .opcua_server import YerbaOpcUaServer
 from .persistence import PersistenceService
+from .mass_flow import MassFlowService
 from .replay_service import ReplayService
 from .weather import DEFAULT_LOCATION, WeatherService
 from .whatif_service import WhatIfService
@@ -67,6 +68,7 @@ class TwinRuntime:
         self.persistence: PersistenceService | None = None
         self.replay: ReplayService | None = None
         self.whatif: WhatIfService | None = None
+        self.mass_flow: MassFlowService | None = None
 
         # Fuentes externas (modo twin/shadow)
         self.mirror = ExternalMirror()
@@ -292,6 +294,8 @@ class TwinRuntime:
         self.replay = ReplayService(self.simulator, DATA_DIR)
         # What-if service (orquesta escenarios paralelos)
         self.whatif = WhatIfService(self.simulator, self)
+        # Mass-flow service (trazabilidad de masa entre etapas)
+        self.mass_flow = MassFlowService(self.simulator)
 
     def update_config(self, patch: Dict[str, Any]) -> Dict[str, Any]:
         """Aplica cambios al config en memoria + YAML y al simulador."""

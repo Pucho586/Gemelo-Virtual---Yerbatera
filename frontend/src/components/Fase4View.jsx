@@ -230,15 +230,33 @@ function WhatIfPanel({ admin }) {
                 onChange={(e) => setNewOverridesJson(e.target.value)}
               />
             </div>
-            <div className="md:col-span-3 flex justify-between items-center">
-              <p className="text-[11px] font-mono text-slate-500">Máximo 3 escenarios paralelos. Cambiar requiere borrar primero.</p>
-              <div className="flex gap-2">
-                {scenarios.length > 0 && <Btn testid="whatif-reset-all" variant="secondary" onClick={resetAll}><span className="inline-flex items-center gap-1"><Trash size={12}/> Reset todos</span></Btn>}
-                <Btn testid="whatif-create-btn" onClick={create} disabled={creating || scenarios.length >= 3}>
-                  <span className="inline-flex items-center gap-1"><Plus size={12}/> {creating ? 'Creando...' : 'Crear escenario'}</span>
-                </Btn>
-              </div>
+            <div className="md:col-span-3 flex flex-wrap items-center gap-2">
+              <p className="text-[11px] font-mono text-slate-500 flex-1 min-w-[180px]">Máximo 3 escenarios paralelos. Cambiar requiere borrar primero.</p>
+              <Btn testid="whatif-snapshot-btn" variant="secondary" onClick={async () => {
+                  if (!newName.trim()) { alert('Asigná un nombre antes del snapshot'); return; }
+                  if (scenarios.length >= 3) { alert('Ya tenés 3 escenarios. Borrá alguno.'); return; }
+                  let extra = {};
+                  try { if (newOverridesJson.trim()) extra = JSON.parse(newOverridesJson); }
+                  catch (e) { alert('JSON inválido en overrides: ' + e.message); return; }
+                  setCreating(true);
+                  try {
+                    await api.whatifSnapshot(newName.trim(), extra);
+                    setNewName('');
+                    refresh();
+                  } catch (e) { alert(e?.response?.data?.detail || 'Error'); }
+                  finally { setCreating(false); }
+                }} disabled={creating || scenarios.length >= 3}>
+                <span className="inline-flex items-center gap-1">📸 Snapshot baseline → escenario</span>
+              </Btn>
+              {scenarios.length > 0 && <Btn testid="whatif-reset-all" variant="secondary" onClick={resetAll}><span className="inline-flex items-center gap-1"><Trash size={12}/> Reset todos</span></Btn>}
+              <Btn testid="whatif-create-btn" onClick={create} disabled={creating || scenarios.length >= 3}>
+                <span className="inline-flex items-center gap-1"><Plus size={12}/> {creating ? 'Creando...' : 'Crear escenario'}</span>
+              </Btn>
             </div>
+            <p className="md:col-span-3 text-[10px] font-mono text-slate-500 leading-relaxed">
+              <span className="text-amber-300">Snapshot</span>: captura el estado actual del baseline (setpoints de zapecado, secado, canchado, throughput)
+              como punto de partida. Tu JSON de overrides se mergea por encima — sólo sobreescribís lo que querés cambiar.
+            </p>
           </div>
         </Card>
       )}

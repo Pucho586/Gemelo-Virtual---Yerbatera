@@ -56,6 +56,13 @@ export const api = {
   whatifUpdate: (id, overrides) => http.post(`/whatif/${id}`, { overrides }).then(r => r.data),
   whatifDelete: (id) => http.delete(`/whatif/${id}`).then(r => r.data),
   whatifResetAll: () => http.post('/whatif/reset').then(r => r.data),
+  whatifSnapshot: (name, extraOverrides = {}) => http.post('/whatif/snapshot', { name, extra_overrides: extraOverrides }).then(r => r.data),
+  // FASE 4: Mass-flow (trazabilidad de masa entre etapas)
+  massflowGet: () => http.get('/massflow').then(r => r.data),
+  massflowCarga: (kg, T, H) => http.post('/massflow/carga', { kg, T, H }).then(r => r.data),
+  massflowTransferir: (de, a, kg) => http.post('/massflow/transferir', { de, a, kg }).then(r => r.data),
+  massflowSetMerma: (stage, pct) => http.post('/massflow/merma', { stage, pct }).then(r => r.data),
+  massflowReset: () => http.post('/massflow/reset').then(r => r.data),
   // Config
   getConfig: () => http.get('/config').then(r => r.data),
   patchConfig: (body) => http.post('/config', body).then(r => r.data),

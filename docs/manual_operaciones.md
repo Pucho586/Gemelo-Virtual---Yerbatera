@@ -113,6 +113,62 @@ Disponible solo para admin. Permite ajustar:
 - Persistencia automática (cada N segundos a CSV/Excel)
 - Histórico descargable (CSV / XLSX por día)
 
+### 3.7.5 Flujo de masa (proceso real con trazabilidad)
+
+Pestaña **"Flujo de masa"** — modela el flujo de hoja de yerba a través de las etapas industriales tal como ocurre en planta.
+
+**Proceso completo de elaboración de yerba mate** (referencia normativa: INYM, RES GMC 24/13 Mercosur):
+
+```
+COSECHA ──► RECEPCIÓN / PESAJE ──► ZAPECADO ──► SECADO ──► CANCHADO ──► ESTACIONAMIENTO ──► MOLIENDA FINA ──► EMPAQUE
+              50-55% hum             3-5 s          3-8 h     1-3 cm        6-24 meses          separa hojas        500g-1kg
+                                     300-550°C       80-120°C  molienda      o acelerada         de palitos          mezclas
+                                     H_out 22-30%   H_out 4-7% gruesa        con vapor 30-90d
+```
+
+El gemelo digital opera y controla en detalle las **5 etapas centrales**: Recepción → Zapecado → Secado → Canchado → Estacionamiento (cámaras de maduración). La Molienda Fina y el Empaque quedan fuera del scope industrial actual (suelen ser plantas distintas o líneas separadas).
+
+**¿Cómo funciona la pestaña?**
+
+1. **Cargar hoja verde**: ingresá kg que llegaron al patio, opcionalmente la T y H de la hoja (default: T ambiente, H 55%).
+2. **Pipeline visual**: ves las 5 etapas en horizontal, con `kg actual` en cada una, `acumulado in/out`, **merma acumulada en kg y %**, y la T y H de entrada (heredadas de la etapa anterior).
+3. **Botón flecha →** entre etapa N y N+1: transfiere todo lo que hay en la etapa actual a la siguiente, aplicando la merma típica:
+   - Recepción → Zapecado: **0%** (sólo pesaje)
+   - Zapecado → Secado: **35%** (evaporación de la hoja: 55% hum → 25% hum)
+   - Secado → Canchado: **22%** (segunda evaporación: 25% → 4-7% hum)
+   - Canchado → Estacionamiento: **4%** (polvo y partículas finas)
+   - Estacionamiento → siguiente: **0.5%** (respiración mínima)
+4. **T y H heredadas**: la T y H de salida de cada etapa (medidas por los sensores reales) pasan como T_in y H_in de la siguiente. Por ejemplo, si el zapecado opera a 350°C y deja la hoja con 25% de humedad, esos valores aparecen como condición de entrada del secado.
+5. **Top-up**: podés agregar más yerba verde a Recepción durante el día — se promedia ponderadamente con la masa existente.
+6. **Distribución automática**: al transferir al Estacionamiento, los kg se reparten en la cámara con menor carga actual (load balancing).
+7. **Log de eventos**: las últimas 50 cargas y transferencias quedan registradas con timestamp, usuario, kg, merma, T_out y H_out.
+
+**Merma editable**: el admin puede ajustar el % de merma por etapa según la realidad de la planta (algunas yerbas pierden más en zapecado, otras menos).
+
+### 3.7.6 Puntos de medición (sensores reales en planta)
+
+| Etapa | Sensor | Tecnología | Ubicación física | Rango típico |
+|-------|--------|------------|------------------|--------------|
+| **Zapecado** | T entrada | Termocupla tipo K | Entrada del cilindro rotativo (zona de llama directa) | 300-550 °C |
+| **Zapecado** | T salida hoja | Termocupla tipo K | Salida del tambor zapecador | 110-130 °C |
+| **Zapecado** | H salida | Sensor capacitivo o NIR | Banda de salida del zapecado | 22-30 % |
+| **Zapecado** | Vibración | Acelerómetro 3 ejes | Eje del tambor | mantenimiento |
+| **Secado** | T aire entrada | PT100 o termocupla K | Cámara de combustión del secadero | 80-120 °C |
+| **Secado** | T zona | PT100 | Cintas/cilindro del secadero (zonas múltiples) | 70-110 °C |
+| **Secado** | H final | Higrómetro NIR infrarrojo | Salida del secadero | 4-7 % |
+| **Secado** | H aire | Higrómetro bulbo húmedo | Aire de extracción | — |
+| **Canchado** | T rodamientos | PT100 | Carcasa del molino canchador | <70 °C (mant.) |
+| **Canchado** | Vibración | Acelerómetro 3 ejes | Bancada del molino | mantenimiento |
+| **Canchado** | Velocidad rotor | Encoder | Eje del molino | rpm |
+| **Estacionamiento** | T pared | PT100 | Pared de la cámara | 25-45 °C |
+| **Estacionamiento** | T centro pila | PT100 | Centro de la pila de yerba | 25-45 °C |
+| **Estacionamiento** | H relativa | Sensor capacitivo | Cámara | 40-90 % |
+| **Estacionamiento** | CO₂ | Sensor NDIR | Cámara | 500-6000 ppm |
+| **Estacionamiento** | T línea vapor | Termoresistencia | Línea de aprovisionamiento (si hay inyección) | 100-180 °C |
+| **Estacionamiento** | Caudal vapor | Caudalímetro vortex o másico | Cabezal de cámara | 0-200 kg/h |
+
+> Referencias: INYM (Instituto Nacional de la Yerba Mate), normativa Mercosur RTM RES GMC 24/13, literatura técnica de Andina S.A., CARP S.A. y plantas misioneras. La variante exacta depende de antigüedad del equipamiento.
+
 ### 3.8 Replay & What-if (Fase 4)
 
 Pestaña central de **entrenamiento** y **simulación paralela**.
@@ -251,7 +307,7 @@ Benchmarks:
 
 Lleva **horas de marcha acumuladas** por componente y compara contra umbrales editables:
 
-| Componente | Lubricación | Rulemanes | Overhaul |
+| Componente | Lubricación | Rodamientos | Overhaul |
 |------------|------------:|----------:|---------:|
 | Tambor zapecado | 500 h | 2000 h | 4000 h |
 | Secador | 500 h | 2000 h | 4000 h |

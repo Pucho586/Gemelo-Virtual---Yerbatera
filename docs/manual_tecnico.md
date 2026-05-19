@@ -290,6 +290,8 @@ Corre hasta **3 escenarios paralelos**. Cada escenario es un `WhatIfScenario` co
 - Contadores propios de kWh, chips, runtime, producción.
 - KPIs calculados al vuelo: OEE, costo/kg, kWh acum, chips kg, T zapecado, T secado, HR final, producción kg.
 
+**Snapshot → What-if** (endpoint `POST /api/whatif/snapshot`): captura los setpoints actuales del baseline (`zapecado.velocidad_chip`, `zapecado.velocidad_tambor`, `secado.velocidad_aire`, `canchado.velocidad_molino`, `simulacion.throughput_kgh`) y arma overrides automáticamente; `extra_overrides` del usuario se mergean por encima. Útil para preguntarse "¿qué pasaría si en este mismo momento de la corrida ajusto X parámetro?" sin escribir JSON desde cero.
+
 Bucle único (`_loop`, thread daemon):
 ```
 cada 1s:
@@ -322,6 +324,55 @@ Cada `CamaraMaduracion` ahora tiene tres modos de operación:
 3. **Pasivo** → 70% ambiente + 30% setpoint.
 
 El consumo de vapor se calcula como `vapor_caudal_kgh × dt_h` y queda disponible para análisis de costos (caldera, agua, gas si la caldera lo usa, etc.).
+
+### 3.12 MassFlowService (`mass_flow.py`) — trazabilidad de masa
+
+Sigue el flujo de hoja de yerba a través de las 5 etapas controladas (`recepcion`, `zapecado`, `secado`, `canchado`, `estacionamiento`). Cada `StageMass` mantiene:
+
+- `kg_actual`: masa en proceso en la etapa
+- `kg_acum_in`, `kg_acum_out`: contadores históricos
+- `merma_kg_acum`: pérdida total
+- `T_in`, `H_in`: condiciones de entrada (heredadas del paso anterior)
+- `ts_last_in`, `ts_last_out`
+
+**Operaciones**:
+
+```python
+mass_flow.cargar_hoja_verde(kg, T=None, H=None, user="...")
+# defaults: T = sim.ambient_temp, H = 55.0 (hoja recién cosechada)
+# si recepción ya tenía masa, T y H se promedian ponderadamente
+
+mass_flow.transferir(de, a, kg=None, user="...")
+# kg=None → transfiere todo
+# valida secuencia: sólo permite avanzar al stage siguiente
+# kg_out = kg_in × (1 - merma_pct[de])
+# dst.T_in = simulator output T del stage `de`
+# dst.H_in = simulator output H del stage `de`
+# si dst es 'estacionamiento', reparte a la cámara con menor carga (load balancing)
+
+mass_flow.set_merma(stage, pct)   # admin only, 0 ≤ pct ≤ 0.95
+mass_flow.reset()                  # admin only
+mass_flow.snapshot()               # estado completo + últimos 50 eventos del log
+```
+
+**Mermas por defecto** (referencial, INYM):
+
+| Etapa | Merma | Justificación |
+|-------|------:|---------------|
+| Recepción | 0.0% | Sólo pesaje, sin pérdida |
+| Zapecado | 35.0% | Evaporación intensa (55% hum → 25% hum) |
+| Secado | 22.0% | Segunda evaporación (25% → 4-7% hum) |
+| Canchado | 4.0% | Polvo, partículas finas que se aspiran |
+| Estacionamiento | 0.5% | Respiración mínima de la yerba |
+
+**Lectura de T_out / H_out** por etapa (en `_read_stage_output`):
+
+| Etapa de origen | T_out (sensor) | H_out (sensor) |
+|-----------------|----------------|----------------|
+| Recepción | T ambiente clima | 55.0 (constante) |
+| Zapecado | `sim.zapecado.temperatura` | `sim.flujo['zap_out_humedad']` |
+| Secado | `sim.secado.temperatura` | `sim.secado.humedad` |
+| Canchado | `sim.secado.temperatura - 5` | `sim.secado.humedad` |
 
 ---
 
@@ -436,7 +487,17 @@ El consumo de vapor se calcula como `vapor_caudal_kgh × dt_h` y queda disponibl
 - `POST /camaras/count` (admin) `{count: 1..12}` — agrega/quita cámaras desde el final, persiste en `config_yerba.yaml`
 - `POST /camaras/{idx}` `{carga_kg?, ventilador?, temperatura_obj?, humedad_obj?, co2_obj?, vapor_activo?, vapor_caudal_kgh?, vapor_setpoint_temp?, vapor_setpoint_hum?}`
 
-### 5.13 Config + clima + IA + datos
+### 5.13 MassFlow (trazabilidad de masa)
+- `GET /massflow` → snapshot completo de las 5 etapas + log de últimos 50 eventos
+- `POST /massflow/carga` `{kg, T?, H?}` — carga hoja verde a Recepción (any user)
+- `POST /massflow/transferir` `{de, a, kg?}` — transfiere a la etapa siguiente con merma e inherencia T/H
+- `POST /massflow/merma` (admin) `{stage, pct}` — ajusta % de merma de una etapa
+- `POST /massflow/reset` (admin) — reset total
+
+### 5.14 What-if extras
+- `POST /whatif/snapshot` (admin) `{name, extra_overrides}` — captura baseline + merge de overrides extras
+
+### 5.15 Config + clima + IA + datos
 - `GET /config` / `POST /config`
 - `GET /weather` / `POST /weather/location` / `GET /weather/search?q=`
 - `POST /ai/chat` / `GET /ai/history/{sid}` / `POST /ai/reset/{sid}`

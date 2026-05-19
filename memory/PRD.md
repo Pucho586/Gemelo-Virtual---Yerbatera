@@ -48,6 +48,15 @@ React (frontend + auth JWT) ─┬─► FastAPI /api/* (REST + WebSocket)
 ### v2.2 — Industria 4.0 (iter 4) — 66/66 tests
 - Clientes Modbus + OPC UA + MQTT subscriber, modo Shadow, drift sim vs PLC, calibración por CSV, audit trail
 
+### v2.5 — Mass-flow + Snapshot→What-if + rodamientos (iter 8) — 49/49 tests ★
+- **Trazabilidad de masa lote-por-lote**: nuevo servicio `MassFlowService` con 5 etapas (Recepción → Zapecado → Secado → Canchado → Estacionamiento)
+- Cada etapa registra `kg_actual`, `kg_acum_in/out`, `merma_kg`, `T_in/H_in` heredadas de la etapa anterior
+- UI: nueva tab **"Flujo de masa"** con pipeline horizontal, carga de hoja verde, botones → de transferencia, log de eventos
+- **Snapshot → What-if**: botón en panel what-if que captura setpoints actuales del baseline como base del nuevo escenario
+- **`rulemanes` → `rodamientos`** en todo el sistema (terminología técnica correcta es-AR) con migración automática de Mongo
+- **Documentación**: agregados puntos de medición reales (termocuplas K, PT100, NIR, NDIR) por etapa, mermas referenciales INYM
+- Backend bug fix: route ordering `/whatif/snapshot` antes de `/whatif/{id}`
+
 ### v2.4 — FASE 4 + Cámaras configurables + Vapor (iter 7) — 16/16 backend, frontend OK ★
 - **Cámaras configurables** (1-12) desde UI con +/- buttons
 - **Inyección de vapor por cámara**: toggle, caudal (kg/h), setpoints T y HR, acumulador kg
@@ -76,7 +85,7 @@ React (frontend + auth JWT) ─┬─► FastAPI /api/* (REST + WebSocket)
 ### v2.3 — Operaciones (iter 5) — 89/89 tests ★
 - **Alarmas ISA-18.2**: 7 reglas default + custom, 4 prioridades, ACK persistente, RTN-with/without-ACK, restore desde DB tras reinicio
 - **OEE**: Disponibilidad × Rendimiento × Calidad con ventana móvil
-- **Mantenimiento predictivo**: 7 componentes (tambor, secador, molino, 4 ventiladores), umbrales lubricación/rulemanes/overhaul, ACK con timestamp
+- **Mantenimiento predictivo**: 7 componentes (tambor, secador, molino, 4 ventiladores), umbrales lubricación/rodamientos/overhaul, ACK con timestamp
 - **Energía & costos**: kWh por componente + m³ gas estimado + $/kg producido + margen + revenue (precios editables)
 - **Reportes PDF**: mensual (OEE, lotes, alarmas, energía, mantenimiento) y por lote (técnico)
 - **Badge global de alarmas activas** en header

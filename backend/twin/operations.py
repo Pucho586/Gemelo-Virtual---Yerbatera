@@ -48,13 +48,13 @@ COMPONENT_POWER_KW = {
 
 # Umbrales de mantenimiento (horas de marcha)
 DEFAULT_MAINT_THRESHOLDS = {
-    "tambor_zapecado": {"lubricacion": 500, "rulemanes": 2000, "overhaul": 4000},
-    "secador":         {"lubricacion": 500, "rulemanes": 2000, "overhaul": 4000},
-    "molino_canchado": {"lubricacion": 400, "rulemanes": 1500, "overhaul": 3000},
-    "ventilador_cam0": {"lubricacion": 800, "rulemanes": 4000, "overhaul": 8000},
-    "ventilador_cam1": {"lubricacion": 800, "rulemanes": 4000, "overhaul": 8000},
-    "ventilador_cam2": {"lubricacion": 800, "rulemanes": 4000, "overhaul": 8000},
-    "ventilador_cam3": {"lubricacion": 800, "rulemanes": 4000, "overhaul": 8000},
+    "tambor_zapecado": {"lubricacion": 500, "rodamientos": 2000, "overhaul": 4000},
+    "secador":         {"lubricacion": 500, "rodamientos": 2000, "overhaul": 4000},
+    "molino_canchado": {"lubricacion": 400, "rodamientos": 1500, "overhaul": 3000},
+    "ventilador_cam0": {"lubricacion": 800, "rodamientos": 4000, "overhaul": 8000},
+    "ventilador_cam1": {"lubricacion": 800, "rodamientos": 4000, "overhaul": 8000},
+    "ventilador_cam2": {"lubricacion": 800, "rodamientos": 4000, "overhaul": 8000},
+    "ventilador_cam3": {"lubricacion": 800, "rodamientos": 4000, "overhaul": 8000},
 }
 
 
@@ -103,7 +103,15 @@ class OperationsService:
                 # Si venía precio gas, lo mapeamos como chips (orden de magnitud distinto, queda default)
                 pass
             self.thresholds = doc.get("thresholds", self.thresholds)
+            # Migración 'rulemanes' → 'rodamientos' (terminología técnica correcta en es-AR)
+            for comp, actions in list(self.thresholds.items()):
+                if isinstance(actions, dict) and "rulemanes" in actions:
+                    actions["rodamientos"] = actions.pop("rulemanes")
             self.maint_acks = doc.get("maint_acks", {})
+            # Migrar también acks
+            for comp, acks in list((self.maint_acks or {}).items()):
+                if isinstance(acks, dict) and "rulemanes" in acks:
+                    acks["rodamientos"] = acks.pop("rulemanes")
             self.shifts_per_day = int(doc.get("shifts_per_day", DEFAULT_SHIFTS["shifts_per_day"]))
             self.hours_per_shift = float(doc.get("hours_per_shift", DEFAULT_SHIFTS["hours_per_shift"]))
             self.chip_calorific_mj_kg = float(doc.get("chip_calorific_mj_kg", DEFAULT_CHIP_CALORIFIC_MJ_KG))
@@ -281,7 +289,7 @@ class OperationsService:
 
     def update_thresholds(self, thresholds: Dict[str, Dict[str, float]]):
         """Actualiza umbrales de mantenimiento. Estructura:
-           {"tambor_zapecado": {"lubricacion": 500, "rulemanes": 2000, ...}, ...}"""
+           {"tambor_zapecado": {"lubricacion": 500, "rodamientos": 2000, ...}, ...}"""
         for comp, actions in (thresholds or {}).items():
             if comp not in self.thresholds:
                 self.thresholds[comp] = {}
