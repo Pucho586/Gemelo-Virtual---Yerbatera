@@ -80,7 +80,11 @@ export function Toggle({ value, onChange, label, testid }) {
     <label className="inline-flex items-center gap-2 cursor-pointer select-none" data-testid={`${testid}-label`}>
       <span
         data-testid={testid}
+        role="switch"
+        aria-checked={!!value}
+        tabIndex={0}
         onClick={() => onChange(!value)}
+        onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onChange(!value); } }}
         className={`toggle ${value ? 'on' : ''}`}
       />
       {label && <span className="text-xs text-slate-400 font-mono">{label}</span>}

@@ -486,11 +486,18 @@ class ExternalSourceBody(BaseModel):
     interval: Optional[float] = None
     endpoint: Optional[str] = None
     broker: Optional[str] = None
-    user: Optional[str] = None
+    mqtt_user: Optional[str] = None  # renombrado para evitar colisión con dependency 'user'
     password: Optional[str] = None
     topic_base: Optional[str] = None
     namespace_idx: Optional[int] = None
     mapping: Optional[Dict[str, Any]] = None
+
+    # alias para compatibilidad con frontend que mande 'user'
+    @classmethod
+    def model_validate_compat(cls, data):
+        if isinstance(data, dict) and "user" in data and "mqtt_user" not in data:
+            data["mqtt_user"] = data.pop("user")
+        return cls(**data)
 
 
 class CalibrationApplyBody(BaseModel):
@@ -511,11 +518,20 @@ async def external_status():
 
 
 @api.post("/external/{section}")
-async def configure_external(section: str, body: ExternalSourceBody, request: Request, user=Depends(admin_only)):
+async def configure_external(section: str, body: Dict[str, Any], request: Request, user=Depends(admin_only)):
     if section not in ("modbus_client", "opcua_client", "mqtt_subscriber"):
         raise HTTPException(404, "Sección desconocida")
     rt = get_runtime()
-    kwargs = body.model_dump(exclude_none=True)
+    # Aceptar 'user' (frontend MQTT) y mapearlo internamente a 'mqtt_user'
+    if "user" in body:
+        body["mqtt_user"] = body.pop("user")
+    # filtrar keys válidas
+    valid_keys = {"enabled", "host", "port", "interval", "endpoint", "broker",
+                  "mqtt_user", "password", "topic_base", "namespace_idx", "mapping"}
+    kwargs = {k: v for k, v in body.items() if k in valid_keys and v is not None}
+    # En el subscriber MQTT, la signatura espera 'user', así que volvemos a mapear
+    if section == "mqtt_subscriber" and "mqtt_user" in kwargs:
+        kwargs["user"] = kwargs.pop("mqtt_user")
     rt.reconfigure_external(section, **kwargs)
     await audit_service.log(user["username"], f"configure_external.{section}", kwargs,
                             ip=request.client.host if request.client else None)
@@ -538,7 +554,8 @@ async def calibration_analyze(file_text: Dict[str, str], user=Depends(admin_only
         result = calibrate_from_csv(csv_text, sample_interval_s=5.0)
         return result
     except Exception as e:
-        raise HTTPException(500, f"Error procesando CSV: {e}")
+        logger.exception("calibration analyze failed")
+        raise HTTPException(500, "No se pudo procesar el CSV. Verificá formato y columnas.")
 
 
 @api.post("/calibration/apply")
