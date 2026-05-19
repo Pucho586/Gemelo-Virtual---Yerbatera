@@ -34,7 +34,7 @@ DEFAULT_LIMITS = {
 }
 
 # Constantes físicas (simplificadas)
-PCI_CHIP_KWH_KG = 5.0      # kW térmicos por kg/h de chips quemándose (PCI ~18 MJ/kg × η 0.5 / 3600)
+PCI_CHIP_KWH_KG = 3.5      # kW térmicos por kg/h de chips (PCI×η empírico calibrado)
 CP_AIRE = 1.0              # kJ/(kg·°C)
 CP_YERBA = 1.8             # kJ/(kg·°C)
 LAMBDA_VAP = 2260.0        # kJ/kg (calor latente de vaporización a 100°C)

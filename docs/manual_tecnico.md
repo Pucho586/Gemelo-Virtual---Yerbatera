@@ -596,7 +596,7 @@ de sintonía PID.
 
 **Zapecado** (horno rotatorio):
 - `C · dT/dt = P_chips − P_pared − P_aire − P_yerba`
-- `P_chips = vel_chip_real × PCI(=5 kW/(kg/h))` (η incluido)
+- `P_chips = vel_chip_real × PCI(=3.5 kW/(kg/h))` (η incluido — calibrado para que chip=30 + tambor=15 dé T≈350-380°C)
 - Si `vel_tambor < 5 rpm`: ahogo → η × 0.1
 - `P_pared = 0.05·(T − T_amb)`, `P_aire = 0.003·vel_tambor·(T − T_amb)`, `P_yerba = 0.015·vel_tambor·(T − T_amb)`
 - `C = 30 kJ/°C`
