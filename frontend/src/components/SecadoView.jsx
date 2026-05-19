@@ -4,6 +4,7 @@ import { SecadoChart, flatten } from './Charts';
 import { SecadoMimic, SecadoPid } from './Mimics';
 import StageBlock from './StageBlock';
 import FaultPanel from './FaultPanel';
+import PidPanel from './PidPanel';
 import { useLocalSync } from '../lib/useLocalSync';
 import { api } from '../lib/api';
 import { Drop } from '@phosphor-icons/react';
@@ -13,6 +14,7 @@ export default function SecadoView({ state, series, mimicStyle = 'svg' }) {
   const ambient = state?.ambient;
   const faults = s?.faults || {};
   const [aire, setAire] = useLocalSync(s?.velocidad_aire ?? 2.5);
+  const [cal, setCal] = useLocalSync(s?.posicion_calefactor ?? 0);
   const [estado, setEstado] = useLocalSync(s?.estado ?? true);
   const [tObj, setTObj] = useLocalSync(s?.temperatura_obj ?? 95);
   const [hObj, setHObj] = useLocalSync(s?.humedad_obj ?? 7);
@@ -64,7 +66,10 @@ export default function SecadoView({ state, series, mimicStyle = 'svg' }) {
             <NumberInput testid="secado-tau" label="τ térmica" unit="s" value={tau}
               onChange={(v) => { setTau(v); apply({ tau_t: v }); }}
               min={5} max={1800} step={5} />
-            <Slider testid="secado-aire-slider" label="Velocidad aire (acopla T y HR)" value={aire}
+            <Slider testid="secado-cal-slider" label="Posición calefactor (manipulada principal)" value={cal}
+              onChange={(v) => { setCal(v); apply({ posicion_calefactor: v }); }}
+              min={0} max={100} step={1} unit="%" />
+            <Slider testid="secado-aire-slider" label="Velocidad aire (manipulada secundaria)" value={aire}
               onChange={(v) => { setAire(v); apply({ velocidad_aire: v }); }}
               min={0} max={15} step={0.1} unit="m/s" />
             <div className="flex items-center justify-between pt-2">
@@ -82,6 +87,23 @@ export default function SecadoView({ state, series, mimicStyle = 'svg' }) {
 
       <div className="lg:col-span-3">
         <StageBlock stage="secado" state={state} />
+      </div>
+
+      <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-px hair-grid">
+        <PidPanel
+          title="PID Temperatura · ajusta calefactor"
+          pid={s?.pid_t}
+          manipulada="posición calefactor (%)"
+          onApply={(patch) => apply({ pid_t: patch })}
+          testidBase="sec-pid-t"
+        />
+        <PidPanel
+          title="PID Humedad · ajusta vel. aire"
+          pid={s?.pid_h}
+          manipulada="vel. aire (m/s)"
+          onApply={(patch) => apply({ pid_h: patch })}
+          testidBase="sec-pid-h"
+        />
       </div>
 
       <div className="lg:col-span-3">

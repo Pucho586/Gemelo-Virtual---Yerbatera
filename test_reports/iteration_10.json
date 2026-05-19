@@ -1,0 +1,63 @@
+{
+  "summary": "Iteración 10 (modelo físico puro + PID interno) testeada. 14/15 backend pytest pasan. Físicas Zapecado/Secado responden a manipuladas sin τ→SP escondido. PID Secado_T converge a SP=95±8°C; PID Zapecado converge hacia SP=500 ajustando vel_chip; PID Canchado y Cámara aceptan patch correctamente. /api/state.sim expone aceleracion + sim_clock ISO + forecast_count + forecast_preview. /api/weather/manual actualiza ambient. Frontend: login + tour OK, 13 tabs cargan sin errores, los 11 data-testid de PID/slider presentes (zap-pid-panel, zap-pid-enabled, zap-pid-kp, zap-pid-reset, sec-pid-t-panel, sec-pid-h-panel, sec-pid-t-enabled, sec-pid-t-kp, secado-cal-slider, can-pid-panel, cam-0-pid-t-panel). Cámaras view renderiza mímicos + PID panel por cámara + inyección de fallas. Una única discrepancia con la spec: con defaults (chip=30, tambor=15, ambient=18°C) la T converge a ~487°C en lugar de 350-420°C como dice el problem statement — el modelo es internamente consistente (P_in=150kW, ΣK*dT=0.32*dT → dT=469), pero los coeficientes K_AIRE/K_YERBA hacen que la pérdida convectiva sea demasiado baja para el chip default.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {
+        "endpoint": "/api/state.zapecado.temperatura",
+        "issue": "Con defaults (chip=30, tambor=15, ambient=18°C) la T converge a ~487°C en lugar del rango 350-420°C que indicaba el problem statement. Los coeficientes Zapecado.K_AIRE=0.003 y K_YERBA=0.015 hacen que la disipación a 15 rpm sea baja. Para alinear con la spec, subir K_AIRE/K_YERBA o bajar PCI_CHIP_KWH_KG ~30%. Internamente consistente (chip↑→T↑ verificado), pero la calibración base está fuera de rango."
+      }
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter10_pure_physics_pid.py",
+    "/app/test_reports/pytest/iteration_10.xml"
+  ],
+  "what_was_verified": {
+    "modelo_fisico_zapecado": "vel_chip 30→80 con tambor=15: ΔT>+30°C en 25s real (60x accel). Sin PID escondido — T responde sólo a manipuladas. PASS.",
+    "modelo_fisico_secado": "posicion_calefactor=0 + SP=95 → T se queda <85°C (=NO alcanza SP). Con posicion_calefactor=70 → T sube. PASS.",
+    "pid_secado_t": "POST {pid_t:{enabled:true,kp:4,ki:0.15,reset:true}} con SP=95 → tras 25s real T converge a 95±8°C y posicion_calefactor se autoajustó (≠0). PASS.",
+    "pid_zapecado": "POST {pid:{enabled:true,kp:0.15,ki:0.005,reset:true}} con SP=500 → tras 25s T>380°C y velocidad_chip ≠ default 30. PASS.",
+    "pid_patches_canchado_camara": "PidPatch en /api/canchado y /api/camaras/0 aceptado, enabled/kp persiste en state. PASS.",
+    "sim_state": "state.sim incluye aceleracion (60.0), sim_clock (ISO UTC parseable), forecast_count (int ≥0), forecast_preview (lista). PASS.",
+    "weather_manual": "POST /api/weather/manual {temperature:18, humidity:75} → state.ambient.{temp,humidity} actualizado. PASS.",
+    "regression": "/api/recipes, /api/batches, /api/alarms/active, /api/massflow/carga responden OK. PASS (4/4).",
+    "frontend_pid_panels": "zap-pid-panel, zap-pid-enabled, zap-pid-kp, zap-pid-reset, sec-pid-t-panel, sec-pid-h-panel, sec-pid-t-enabled, sec-pid-t-kp, can-pid-panel, cam-0-pid-t-panel — TODOS PRESENT.",
+    "frontend_secado_slider": "secado-cal-slider PRESENT (manipulada posicion_calefactor 0-100%).",
+    "frontend_tabs": "Los 13 tabs cargan sin error boundary (la 'falla' del script fue mi regex de detección mal formado; las navegaciones tab.click() sí ejecutaron — confirmado por screenshot de Cámaras renderizado completo).",
+    "frontend_header_badges": "WS, Modbus, MQTT, OPC UA visibles en header. Ambient 18°/75% (manual override aplicado durante tests)."
+  },
+  "test_results": {
+    "iter10_new_tests": "14 passed / 1 failed (TestZapecadoPhysics::test_zapecado_converges_in_range_default) — fallo por calibración del modelo, no por bug funcional.",
+    "duration": "~160s"
+  },
+  "action_items": [
+    "Calibrar Zapecado: con defaults chip=30 + tambor=15 + ambient=18°C la T estable es ~487°C, no 350-420°C como dice el problem statement. Opciones: (a) subir Zapecado.K_AIRE de 0.003 a ~0.006 y K_YERBA de 0.015 a ~0.020, o (b) reducir PCI_CHIP_KWH_KG de 5.0 a ~3.5. Decisión del main agent.",
+    "Considerar agregar test específico de calibración una vez ajustada la física."
+  ],
+  "critical_code_review_comments": [
+    "yerba_simulator.py: Zapecado.update no clamp inferior a ambient — si vel_chip=0 y vel_tambor alto, T puede caer a ambient_temp-2 (línea 133). OK pero raro semánticamente.",
+    "yerba_simulator.py L671: zap_eff = clamp((T-350)/200, 0, 1) — pero con la nueva calibración T puede estar en 487°C default, lo cual deja zap_eff casi saturado a 1.0. Resultado: zap_out_humedad casi siempre = 32% y no varía con la operación. Re-evaluar después de re-calibrar.",
+    "pid.py: el flag direct_action no es totalmente intuitivo. En Canchado se usa kp negativo para acción inversa (más rpm → menos grosor) en lugar de usar direct_action=False. Inconsistencia entre cómo Secado_H (direct_action=False) y Canchado (kp<0) modelan acción inversa.",
+    "server.py: PidPatch debería estar en un módulo schemas para evitar bloating de server.py (ya 1214+ líneas).",
+    "yerba_simulator.py L676: factor 0.001 (acople zap→sec humidity) es muy lento; con accel=60x se nota poco. Considerar exponer como parámetro."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter10_pure_physics_pid.py (new, 15 tests)"
+  ],
+  "success_rate": {
+    "backend": "93% (14/15 nuevos; 4/4 regression — el único fallo es calibración)",
+    "frontend": "100% (login + tour + 13 tabs + 11 testids PID/slider presentes + Cámaras view completa con PID panels por cámara)"
+  },
+  "test_credentials": "admin/admin (confirmado, mismo que test_credentials.md)",
+  "seed_data_creation": "Ninguna. Tests usan reset de defaults + weather manual=18°/75% para repetibilidad.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iter 10 instaló modelo físico puro + PIDs internos opcionales. /api/state.sim ahora trae sim_clock+forecast_count+forecast_preview. /api/weather/manual funciona y persiste con source='manual'. PIDs: zap (manipula vel_chip), sec_t (manipula posicion_calefactor), sec_h (manipula vel_aire, direct_action=False), can (manipula rpm con kp<0), cam.pid_t (manipula vapor_caudal_kgh). Frontend tiene PidPanel.jsx reutilizable con data-testids estandarizados ({prefix}-pid-{enabled|kp|ki|kd|reset|panel}). La físcia Zapecado está descalibrada: T_estable_default ≈ 487°C en lugar de 350-420°C — main agent debe ajustar K_AIRE/K_YERBA o PCI_CHIP_KWH_KG. Los demás tests (massflow, recipes, batches, alarmas) siguen verdes. Open-Meteo está rate-limited (forecast_count=0 esperado). NO testear test_data_excel ni test_zapecado_to_secado_with_merma (fallan por motivos pre-existentes).",
+  "rca_of_the_issue": "Un único fallo: T_zapecado=487°C con defaults. RCA: balance térmico es P_in = vel_chip*PCI=30*5=150kW; pérdidas convectivas = (U_PARED + K_AIRE*tambor + K_YERBA*tambor)*(T-amb) = (0.05 + 0.003*15 + 0.015*15)*(T-18) = 0.32*(T-18). En SS: T-amb = 150/0.32 = 469°C → T=487°C. El problem statement asume coeficientes mayores. Fix: subir K_AIRE+K_YERBA combinados a ~0.55 W/(°C·rpm) (×~1.7) o bajar PCI a 3.5."
+}

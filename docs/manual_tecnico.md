@@ -575,20 +575,91 @@ valores también se refleja en Modbus y OPC UA** (ver §3.4).
   (1× real, 1 min/s, 1 h/s, 1 día/s).
 - `POST /weather/manual` `{temperature, humidity}` — Override manual ambient (admin).
 
-### 5.4 Acoplamientos físicos del modelo
+### 5.4 Modelo físico puro (sin PID interno escondido)
 
-| Cambio operativo | Efecto en el modelo |
-|------------------|---------------------|
-| `vel.chips ↑` (zapecado) | SP dinámico sube 1.4 °C por kg/h |
-| `vel.tambor ↑` (zapecado) | SP baja 1.2 °C por rpm sobre 30 (enfriamiento) |
-| `vel.tambor = 0` (zapecado) | SP cae a 280 °C (ahogo), τ × 3 |
-| `vel.aire ↑` (secado) | T efectiva = SP − 2.5·(aire − 2.5); HR baja √(aire) |
-| `vel.aire = 0` (secado) | HR sube al ambiente (sin arrastre) |
-| `rpm ↑` (canchado) | Grosor target = 10 − 0.07·rpm |
-| `estado = OFF` (canchado) | rpm_real = 0, partícula congelada |
-| `ventilador OFF` (cámara) | Modo pasivo: target = 0.7·ambiente + 0.3·SP |
-| `vapor ON + caudal` (cámara) | τ efectivo = 10-30% del nominal |
-| `puerta_abierta` (cámara) | Pérdida acelerada 2% / s hacia ambiente |
+Desde v2026.05.19 el simulador es **proceso puro**: ya no hay un término
+`(SP − T)/τ` escondido. Cada etapa tiene su balance energético/másico real,
+y el operador (o un PLC externo) mueve las **variables manipuladas** para
+llegar al SP. Esto convierte al simulador en herramienta de entrenamiento
+de sintonía PID.
+
+#### Variables manipuladas por etapa
+
+| Etapa | Manipuladas | SPs (referencia) | PID interno disponible |
+|-------|-------------|------------------|------------------------|
+| Zapecado | `velocidad_chip` (kg/h), `velocidad_tambor` (rpm), `estado_alimentacion` | `temperatura_obj` | PID T → vel.chip |
+| Secado | `posicion_calefactor` (0-100%), `velocidad_aire` (m/s), `estado` | `temperatura_obj`, `humedad_obj` | PID_T → calefactor, PID_H → vel.aire |
+| Canchado | `velocidad_molino` (rpm), `estado` | `tamano_particula_obj` | PID → rpm |
+| Cámaras | `vapor_caudal_kgh`, `vapor_activo`, `vent_pos`, `ventilador` | `temperatura_obj`, `humedad_obj`, `co2_obj` | PID T → caudal vapor |
+
+#### Ecuaciones de balance
+
+**Zapecado** (horno rotatorio):
+- `C · dT/dt = P_chips − P_pared − P_aire − P_yerba`
+- `P_chips = vel_chip_real × PCI(=5 kW/(kg/h))` (η incluido)
+- Si `vel_tambor < 5 rpm`: ahogo → η × 0.1
+- `P_pared = 0.05·(T − T_amb)`, `P_aire = 0.003·vel_tambor·(T − T_amb)`, `P_yerba = 0.015·vel_tambor·(T − T_amb)`
+- `C = 30 kJ/°C`
+
+**Secado** (lecho con calefactor + ventilador):
+- `C · dT/dt = P_cal − P_pared − P_aire − P_evap`
+- `P_cal = (pos_cal/100) × 50 kW`
+- `P_pared = 0.05·(T − T_amb)`, `P_aire = 0.15·vel_aire·(T − T_amb)`
+- `P_evap = m_evap · λ_vap` (consume calor por evaporar agua)
+- `dHR/dt = −0.0008·vel_aire·max(0, HR − HR_eq)`
+- `C = 25 kJ/°C`
+
+**Canchado**: rpm = manipulada directa, partícula sigue `target = 10 − 0.07·rpm` con τ = 5s.
+
+**Cámara maduración**:
+- `C · dT/dt = P_vapor − P_pared − P_extrac`
+- `P_vapor = (vapor_caudal_kgh/3600) × 2680 kJ/kg`
+- `P_pared = 0.20·(T − T_amb)`, `P_extrac = 0.05·vent_frac·(T − T_amb)`
+- `dHR/dt = K_VAPOR_H·m_vapor − vent·(HR − HR_amb)·0.002`
+- Puerta abierta → pérdida × 100 al ambiente
+- `C = 200 kJ/°C`
+
+### 5.5 PID configurable por etapa
+
+Cada PID interno se controla vía `pid` (o `pid_t`, `pid_h`) en el patch:
+
+```json
+POST /api/secado {
+  "pid_t": {
+    "enabled": true,
+    "kp": 4.0, "ki": 0.15, "kd": 0.0,
+    "sp": 95.0,
+    "reset": true
+  }
+}
+```
+
+Defaults razonables ya cargados (PID OFF). Activar y tunar para practicar.
+`enabled=false` → el PID NO mueve la manipulada → operador/PLC externo la controla.
+
+### 5.6 Forecast meteorológico horario
+
+Cuando la aceleración de simulación es > 1×, el simulador consulta el
+forecast horario de Open-Meteo (`hourly=temperature_2m,relative_humidity_2m`,
+4 días = 96 horas) y mantiene el ambient interpolado al reloj simulado.
+
+- En tiempo real (acel = 1×): usa el `current` weather.
+- Acelerado (60×, 1h/s, 1d/s): interpola entre los 96 puntos del forecast.
+- `GET /api/state` expone `sim.sim_clock`, `sim.forecast_count`, `sim.forecast_preview` (próximas 24h).
+
+Si Open-Meteo está caído, se puede forzar manual via `POST /api/weather/manual {temperature, humidity}`.
+
+### 5.7 Tópicos MQTT (publicación cada 5s)
+
+```
+yerba/zapecado       → {pv_temperatura, sp_temperatura, manipuladas, pid, faults}
+yerba/secado         → {pv_temperatura, pv_humedad, sp_*, manipuladas, pid_t, pid_h, faults}
+yerba/canchado       → {pv_tamano_particula, manipuladas, pid, faults}
+yerba/camara_{1..N}  → {pv_*, sp_*, manipuladas, pid_t, faults, carga_kg, dias_maduracion}
+yerba/ambient        → {temperatura, humedad, city, source, ...}
+yerba/sim            → {aceleracion, throughput_kgh, mode, sim_clock}
+yerba/forecast       → {hourly_next_24h: [{time, temp, hum}, ...]}
+```
 
 ### 5.4 Recetas
 - `GET /recipes`

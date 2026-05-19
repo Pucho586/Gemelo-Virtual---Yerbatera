@@ -4,6 +4,7 @@ import { ZapecadoChart, flatten } from './Charts';
 import { ZapecadoMimic, ZapecadoPid } from './Mimics';
 import StageBlock from './StageBlock';
 import FaultPanel from './FaultPanel';
+import PidPanel from './PidPanel';
 import { useLocalSync } from '../lib/useLocalSync';
 import { api } from '../lib/api';
 import { Fire } from '@phosphor-icons/react';
@@ -91,6 +92,16 @@ export default function ZapecadoView({ state, series, mimicStyle = 'svg' }) {
 
       <div className="lg:col-span-3">
         <StageBlock stage="zapecado" state={state} />
+      </div>
+
+      <div className="lg:col-span-3">
+        <PidPanel
+          title="PID Zapecado · ajusta velocidad chips"
+          pid={z?.pid}
+          manipulada="vel. chips (kg/h)"
+          onApply={(patch) => apply({ pid: patch })}
+          testidBase="zap-pid"
+        />
       </div>
 
       <div className="lg:col-span-3">

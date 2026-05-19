@@ -65,34 +65,45 @@ Vista animada del flujo de masa. Cada etapa muestra:
 
 Alternar entre SVG animado y P&ID estático con el botón del header.
 
-### 3.2.5 Setpoints, τ (constante de tiempo) e inyección de fallas
+### 3.2.5 Setpoints, manipuladas, PIDs y fallas
 
-En cada vista de etapa (Zapecado / Secado / Canchado / Cámaras) tenés:
+**Nuevo modelo (v2026.05.19): el simulador es proceso puro.** El operador
+(o un PLC externo) mueve las **variables manipuladas** para que la temperatura
+y humedad reales lleguen al SP. Hay un **PID interno opcional por etapa** que
+hace ese trabajo automáticamente — sirve para entrenar la sintonía.
 
-1. **SP (setpoint)** — el valor *objetivo*. Cambiarlo NO modifica el valor real al instante: el sistema converge gradualmente.
-   - **Zapecado / Canchado**: dejá el SP vacío para usar el SP dinámico (calculado a partir de vel. chips / rpm). Poné un número para fijarlo manualmente.
-   - **Secado**: tiene SP Temp y SP HR (piso de humedad final).
-   - **Cámara**: SP Temp, SP HR y SP CO₂ por cámara.
+#### Manipuladas y PIDs por etapa
 
-2. **τ (tau)** — *constante de tiempo*: cuánto tarda en converger al SP, expresado en segundos de simulación.
+| Etapa | Manipuladas que mueve el operador/PLC | SP | PID interno (toggle) |
+|-------|----------------------------------------|-----|----------------------|
+| Zapecado | vel. chips (kg/h), vel. tambor (rpm) | T objetivo | Ajusta vel. chips |
+| Secado | **posición calefactor (0-100%)**, vel. aire (m/s) | T y HR objetivo | PID T → calefactor, PID HR → vel. aire |
+| Canchado | vel. molino (rpm) | grosor objetivo (mm) | Ajusta rpm |
+| Cámaras | caudal vapor (kg/h), apertura ventilador, vapor ON/OFF | T, HR y CO₂ objetivo | Ajusta caudal vapor |
 
-3. **Velocidad de simulación** (control del header, ícono ⏱) — *compresión de tiempo*: 1×, 60×, 1h/s, 1d/s.
+#### Flujo de trabajo de entrenamiento
 
-4. **Acoplamientos físicos reales** (los cambios de un control afectan a los demás):
-   - **Zapecado**: SP dinámico = 350 + 1.4·vel.chips − 1.2·(vel.tambor − 30). Subí chips → T sube. Subí tambor → T baja por enfriamiento. Tambor = 0 → T cae a ~280 °C (ahogo).
-   - **Secado**: T efectiva = SP − 2.5·(vel.aire − 2.5). Más aire → más enfriamiento convectivo. HR baja proporcional a √(vel.aire).
-   - **Canchado**: grosor target = 10 − 0.07·rpm. Apagado → rpm = 0 (encoder y mímico lo reflejan), partícula congelada en último valor.
-   - **Cámara**: ventilador OFF → modo pasivo (70% ambiente + 30% SP). Vapor ON con caudal alto → τ efectivo se reduce a ~10% del nominal.
+1. Configurá el SP (objetivo).
+2. **PID OFF** (default): movés las manipuladas a mano (o desde el PLC externo via Modbus/OPC UA). Observás si la T converge.
+3. **PID ON**: el PID interno mueve la manipulada automáticamente. Tuneás Kp/Ki/Kd hasta ver buena respuesta sin overshoot.
+4. Generás una falla (botón en panel "Inyección de fallas") y ves cómo el PID o tu PLC reaccionan.
 
-5. **rpm/velocidades REAL vs SP**: la UI siempre muestra "VALOR REAL" + "SP". Cuando algo está apagado o falla, el valor REAL es 0 mientras el SP queda como referencia.
+#### Velocidad de simulación + forecast
 
-6. **Inyección de fallas** (panel al pie de cada vista) — toggles para simular condiciones anormales:
-   - **Zapecado**: `falla quemador` (T cae al ambiente), `falla motor tambor` (τ ×3 más lento).
-   - **Secado**: `falla ventilador` (HR no baja), `falla serpentín` (no calienta).
-   - **Canchado**: `falla motor` (encoder 0 rpm), `rodamiento caliente` (alarma típica).
-   - **Cámaras**: `falla ventilador`, `fuga de vapor`, `puerta/techo abierta`.
+El control ⏱ del header tiene presets (1×, 60×, 1h/s, 1d/s). Cuando se
+acelera, el simulador consume **el pronóstico meteorológico horario** de
+Open-Meteo (96 horas) e interpola al reloj simulado: ves cómo el clima
+cambia y tu control reacciona.
 
-   Todas las fallas se reflejan en los sensores derivados, alarmas, y están **expuestas a Modbus (coils) y OPC UA (booleanos writable)**.
+#### Fallas disponibles
+
+- **Zapecado**: `falla quemador`, `falla motor tambor`
+- **Secado**: `falla ventilador`, `falla serpentín`
+- **Canchado**: `falla motor`, `rodamiento caliente`
+- **Cámaras**: `falla ventilador`, `fuga de vapor`, `puerta/techo abierta`
+
+Todas las manipuladas, SPs, PIDs y fallas están expuestos a **Modbus,
+OPC UA y MQTT** — un PLC real puede leerlos/escribirlos en modo `shadow` o `twin`.
 
 ### 3.2.6 Override manual del clima
 

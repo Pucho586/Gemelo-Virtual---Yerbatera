@@ -3,6 +3,7 @@ import { Card, CardHeader, Metric, Toggle, NumberInput, SectionTitle } from './U
 import { CamarasChart, flatten } from './Charts';
 import { CamaraMimic, CamaraPid } from './Mimics';
 import FaultPanel from './FaultPanel';
+import PidPanel from './PidPanel';
 import { useLocalSync } from '../lib/useLocalSync';
 import { api } from '../lib/api';
 import { useAuth, isAdmin } from '../lib/auth';
@@ -102,8 +103,15 @@ function ChamberCard({ cam, idx, mimicStyle }) {
         </div>
       </div>
 
-      {/* === FALLAS (todo el ancho) === */}
-      <div className="mt-4">
+      {/* === PID + FALLAS (todo el ancho) === */}
+      <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-px hair-grid">
+        <PidPanel
+          title="PID Temperatura cámara · ajusta vapor"
+          pid={cam.pid_t}
+          manipulada="caudal vapor (kg/h)"
+          onApply={(patch) => apply({ pid_t: patch })}
+          testidBase={`cam-${idx}-pid-t`}
+        />
         <FaultPanel
           title="Inyección de fallas"
           faults={faults}

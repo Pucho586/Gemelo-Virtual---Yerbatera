@@ -121,6 +121,15 @@ class YerbaModbusServer:
                 int(zap.get_setpoint() * 10),
                 int((zap.temperatura_obj or 0) * 10),
                 int(zap.tau * 10),
+                # PID interno
+                int(zap.pid.enabled),
+                int(zap.pid.kp * 100),
+                int(zap.pid.ki * 100),
+                int(zap.pid.kd * 100),
+                int(zap.pid.last_output * 10),
+                # Manipuladas reales
+                int(zap.vel_chip_real() * 10),
+                int(zap.vel_tambor_real() * 10),
             ])
             self.context[0].setValues(1, 0, [
                 int(zap.falla_quemador), int(zap.falla_motor_tambor),
@@ -139,6 +148,21 @@ class YerbaModbusServer:
                 int(sec.temperatura_obj * 10),
                 int(sec.humedad_obj * 10),
                 int(sec.tau_t * 10),
+                # Manipulada: posición calefactor (0-100%)
+                int(sec.posicion_calefactor * 10),
+                # PID T
+                int(sec.pid_t.enabled),
+                int(sec.pid_t.kp * 100),
+                int(sec.pid_t.ki * 100),
+                int(sec.pid_t.last_output * 10),
+                # PID H
+                int(sec.pid_h.enabled),
+                int(sec.pid_h.kp * 100),
+                int(sec.pid_h.ki * 100),
+                int(sec.pid_h.last_output * 10),
+                # Manipulada real
+                int(sec.pos_cal_real() * 10),
+                int(sec.vel_aire_real() * 10),
             ])
             self.context[1].setValues(1, 0, [
                 int(sec.falla_ventilador), int(sec.falla_serpentin),
@@ -156,6 +180,13 @@ class YerbaModbusServer:
                 int((can.tamano_particula_obj or 0) * 100),
                 int(can.get_setpoint() * 100),
                 int(can.tau_p * 10),
+                # PID
+                int(can.pid.enabled),
+                int(can.pid.kp * 100),
+                int(can.pid.ki * 100),
+                int(can.pid.last_output * 10),
+                # rpm real
+                int(can.vel_molino_real() * 10),
             ])
             self.context[2].setValues(1, 0, [
                 int(can.falla_motor), int(can.rodamiento_caliente),

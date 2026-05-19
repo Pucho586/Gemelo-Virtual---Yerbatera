@@ -129,38 +129,56 @@ class RecoverBody(BaseModel):
     new_password: str
 
 
+class PidPatch(BaseModel):
+    enabled: Optional[bool] = None
+    kp: Optional[float] = None
+    ki: Optional[float] = None
+    kd: Optional[float] = None
+    sp: Optional[float] = None
+    out_min: Optional[float] = None
+    out_max: Optional[float] = None
+    direct_action: Optional[bool] = None
+    reset: Optional[bool] = None
+
+
 class ZapecadoPatch(BaseModel):
     velocidad_tambor: Optional[float] = None
     velocidad_chip: Optional[float] = None
     estado_alimentacion: Optional[bool] = None
-    temperatura_obj: Optional[float] = None   # SP manual; None/0 = SP dinámico
-    tau: Optional[float] = None                # constante de tiempo (s)
+    temperatura_obj: Optional[float] = None
+    tau: Optional[float] = None
     falla_quemador: Optional[bool] = None
     falla_motor_tambor: Optional[bool] = None
+    pid: Optional[PidPatch] = None
 
 
 class SecadoPatch(BaseModel):
     velocidad_aire: Optional[float] = None
+    posicion_calefactor: Optional[float] = None
     estado: Optional[bool] = None
     temperatura_obj: Optional[float] = None
     humedad_obj: Optional[float] = None
     tau_t: Optional[float] = None
     falla_ventilador: Optional[bool] = None
     falla_serpentin: Optional[bool] = None
+    pid_t: Optional[PidPatch] = None
+    pid_h: Optional[PidPatch] = None
 
 
 class CanchadoPatch(BaseModel):
     velocidad_molino: Optional[float] = None
     estado: Optional[bool] = None
-    tamano_particula_obj: Optional[float] = None  # SP grosor canchada en mm
+    tamano_particula_obj: Optional[float] = None
     tau_p: Optional[float] = None
     falla_motor: Optional[bool] = None
     rodamiento_caliente: Optional[bool] = None
+    pid: Optional[PidPatch] = None
 
 
 class CamaraPatch(BaseModel):
     carga_kg: Optional[float] = None
     ventilador: Optional[bool] = None
+    vent_pos: Optional[float] = None
     temperatura_obj: Optional[float] = None
     humedad_obj: Optional[float] = None
     co2_obj: Optional[float] = None
@@ -172,6 +190,7 @@ class CamaraPatch(BaseModel):
     falla_ventilador: Optional[bool] = None
     fuga_vapor: Optional[bool] = None
     puerta_abierta: Optional[bool] = None
+    pid_t: Optional[PidPatch] = None
 
 
 class CamarasCountBody(BaseModel):

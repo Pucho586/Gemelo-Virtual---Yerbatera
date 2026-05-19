@@ -4,6 +4,7 @@ import { CanchadoChart, flatten } from './Charts';
 import { CanchadoMimic, CanchadoPid } from './Mimics';
 import StageBlock from './StageBlock';
 import FaultPanel from './FaultPanel';
+import PidPanel from './PidPanel';
 import { useLocalSync } from '../lib/useLocalSync';
 import { api } from '../lib/api';
 import { Cube } from '@phosphor-icons/react';
@@ -76,6 +77,16 @@ export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
 
       <div className="lg:col-span-3">
         <StageBlock stage="canchado" state={state} />
+      </div>
+
+      <div className="lg:col-span-3">
+        <PidPanel
+          title="PID Canchado · ajusta rpm"
+          pid={c?.pid}
+          manipulada="vel. molino (rpm)"
+          onApply={(patch) => apply({ pid: patch })}
+          testidBase="can-pid"
+        />
       </div>
 
       <div className="lg:col-span-3">
