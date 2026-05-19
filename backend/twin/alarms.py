@@ -77,6 +77,21 @@ class AlarmEngine:
             by_id[r["id"]] = r
         self.rules = list(by_id.values())
 
+    async def rebuild_active_from_db(self):
+        """Restaura alarmas activas (unacked/acked/rtn) tras reinicio."""
+        cursor = self.db.alarms.find(
+            {"status": {"$in": ["unacked_active", "acked_active", "unacked_rtn"]}},
+            {"_id": 0},
+        ).sort("ts", -1)
+        docs = await cursor.to_list(length=500)
+        # Keep solo la última por rule_id
+        seen = set()
+        for d in docs:
+            rid = d.get("rule_id")
+            if rid and rid not in seen:
+                self.active[rid] = d
+                seen.add(rid)
+
     # ---------- Eval ----------
     def _extract_value(self, state: Dict[str, Any], rule: Dict[str, Any]):
         """Devuelve (value, label) o (None, None)."""

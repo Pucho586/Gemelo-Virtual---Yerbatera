@@ -134,11 +134,11 @@ def build_monthly_report(data: Dict[str, Any], filepath: Path | None = None) -> 
         rows = []
         for a in alarms[:30]:
             rows.append([
-                a.get("ts", "")[:19].replace("T", " "),
-                a.get("priority", "")[:8],
-                a.get("name", "")[:42],
-                a.get("tag", "")[:22],
-                a.get("status", "")[:16],
+                (a.get("ts") or "")[:19].replace("T", " "),
+                (a.get("priority") or "")[:8],
+                (a.get("name") or "")[:42],
+                (a.get("tag") or "")[:22],
+                (a.get("status") or "")[:16],
                 (a.get("acked_by") or "—")[:14],
             ])
         story.append(_table(["Fecha", "Prio", "Alarma", "Tag", "Estado", "ACK por"], rows))

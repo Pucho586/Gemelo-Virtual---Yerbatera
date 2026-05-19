@@ -1,89 +1,80 @@
-# Gemelo Digital · Yerba Mate (Yerbatera Industrial Twin) — v2.2 (FASE 2)
+# Gemelo Digital · Yerba Mate (Yerbatera Industrial Twin) — v2.3 (FASE 3)
 
 ## Problema original
 
-Migración del gemelo digital Python+Tkinter (repo https://github.com/Pucho586/Gemelo-Virtual---Yerbatera) a plataforma web industrial moderna apta para producción. Objetivo: gemelo virtual potente para industria real con conexión bidireccional a PLC, calibración real, audit y modo Shadow.
+Migración del gemelo digital Python+Tkinter del usuario (repo https://github.com/Pucho586/Gemelo-Virtual---Yerbatera) a plataforma web industrial moderna apta para producción real en yerbateras.
 
 ## Arquitectura
 
 ```
 React (frontend + auth JWT) ─┬─► FastAPI /api/* (REST + WebSocket)
                               │
-                              └─► Bridges en threads/async:
-                                   ├─ YerbaProcessSimulator (mass flow + ambient + mode)
-                                   ├─ Modbus TCP server   :5020  (publica simulador)
-                                   ├─ OPC UA server       :4840  (publica simulador)
-                                   ├─ MQTT publisher       → broker externo (OUT)
-                                   ├─ Modbus TCP client    ← PLC externo (IN)   ★ FASE 2
-                                   ├─ OPC UA client        ← PLC externo (IN)   ★ FASE 2
-                                   ├─ MQTT subscriber      ← topics externos    ★ FASE 2
-                                   ├─ Open-Meteo (clima)
-                                   ├─ PersistenceService (CSV/Excel)
-                                   ├─ AIService (Gemini 3 Flash)
-                                   ├─ AuditService (MongoDB)                    ★ FASE 2
-                                   ├─ Calibration (CSV → τ fit)                 ★ FASE 2
-                                   └─ MongoDB (users, batches, recipes, audit_log)
+                              └─► Bridges (threads / async):
+                                   ├─ YerbaProcessSimulator (3 modos: simulator/shadow/twin)
+                                   ├─ Modbus TCP server   :5020  (OUT)
+                                   ├─ OPC UA server       :4840  (OUT)
+                                   ├─ MQTT publisher (OUT)
+                                   ├─ Modbus TCP client    (IN)  ★ FASE 2
+                                   ├─ OPC UA client        (IN)  ★ FASE 2
+                                   ├─ MQTT subscriber      (IN)  ★ FASE 2
+                                   ├─ AlarmEngine ISA-18.2 ★ FASE 3
+                                   ├─ OperationsService (OEE + maint + energía) ★ FASE 3
+                                   ├─ ReportsBuilder (PDF) ★ FASE 3
+                                   ├─ Open-Meteo · PersistenceService · AIService · AuditService
+                                   └─ MongoDB (users, batches, recipes, audit_log, alarms, alarm_rules, ops_state)
 ```
+
+## Usuarios
+
+- **Admin** (admin/admin): TODO — configuración, modo, recetas, lotes, calibración, fuentes externas, audit, alarmas rules, precios energía, reset contadores
+- **Operario** (operario/operario): dashboard, ajustes en vivo, lotes, IA, recetas (aplicar), ACK alarmas, ACK mantenimiento, ver OEE/energía (lectura), descargar reportes
 
 ## Modos de operación
 
 | Modo | Cálculo matemático | Lectura externa | Drift display |
 |------|--------------------|-----------------|---------------|
 | **simulator** (verde) | ✅ activo | ❌ ignorado | – |
-| **shadow** (azul) ★ | ✅ activo | ✅ se lee | ✅ compara |
+| **shadow** (azul) | ✅ activo | ✅ se lee | ✅ compara |
 | **twin** (amber) | ❌ pausado | ✅ alimenta simulator | ✅ trivial |
-
-## Usuarios
-
-- **Admin** (admin/admin): todo (Config, modo, recetas, lotes, calibración, fuentes externas, audit global)
-- **Operario** (operario/operario): dashboard, ajustes en vivo, lotes, IA, recetas (solo aplicar), audit propio
 
 ## Implementado por iteración
 
 ### v2.0 — Migración base (iter 1) — 20/20 tests
-- React + FastAPI con simulador mejorado (ambient real Posadas)
-- Modbus/MQTT/OPC UA servidores publicando
-- Persistencia CSV/Excel
-- IA Gemini 3 Flash
+- React + FastAPI, simulador con ambient real, Modbus/MQTT/OPC UA servers, CSV/Excel, IA Gemini
 
 ### v2.1 — Industria-ready (iter 2-3) — 48/48 tests
-- Auth JWT local (admin/operario + recovery code)
-- Recetas (suave/fuerte/barbacuá/orgánica + custom)
-- Lotes con merma %
-- Switch Simulador ↔ Gemelo
-- Mímicos SVG y P&ID
-- Tabs persistentes
+- Auth JWT + recovery, Recetas, Lotes con merma, Modo switch, Mímicos SVG/P&ID, tabs persistentes
 
-### v2.2 — Industria 4.0 (iter 4) — 66/66 tests ★
-- **Cliente Modbus TCP**: configurable host/port, polleo automático
-- **Cliente OPC UA**: endpoint configurable, lee nodos
-- **Suscriptor MQTT IN**: broker configurable, parse JSON / valor
-- **Modo Shadow** (3er modo): simulador + externo en paralelo + drift
-- **Drift calculator**: tag-a-tag, % error, coloreado por severidad
-- **Calibración por CSV**: regresión por mínimos cuadrados ajusta τ
-- **Audit trail**: MongoDB con filtro por rol
-- **Closed-loop testing**: cliente apunta a 127.0.0.1:5020 sin PLC físico
+### v2.2 — Industria 4.0 (iter 4) — 66/66 tests
+- Clientes Modbus + OPC UA + MQTT subscriber, modo Shadow, drift sim vs PLC, calibración por CSV, audit trail
+
+### v2.3 — Operaciones (iter 5) — 89/89 tests ★
+- **Alarmas ISA-18.2**: 7 reglas default + custom, 4 prioridades, ACK persistente, RTN-with/without-ACK, restore desde DB tras reinicio
+- **OEE**: Disponibilidad × Rendimiento × Calidad con ventana móvil
+- **Mantenimiento predictivo**: 7 componentes (tambor, secador, molino, 4 ventiladores), umbrales lubricación/rulemanes/overhaul, ACK con timestamp
+- **Energía & costos**: kWh por componente + m³ gas estimado + $/kg producido + margen + revenue (precios editables)
+- **Reportes PDF**: mensual (OEE, lotes, alarmas, energía, mantenimiento) y por lote (técnico)
+- **Badge global de alarmas activas** en header
+- 1 bug corregido (None-safety en reports.py) + 1 hardening (rebuild active alarms tras reinicio)
 
 ## Backlog próximo
 
+### FASE 4 — Entrenamiento (próxima)
+- [ ] Modo replay de CSV histórico a 10x velocidad
+- [ ] Modo "qué pasaría si" (bifurcar simulación)
+- [ ] Escenarios de fallas predefinidos para entrenar operarios
+
 ### Quick wins (P1)
-- [ ] Persistir calibración en config YAML (hoy se pierde al reiniciar)
 - [ ] Editor de usuarios desde UI (admin crea/borra/cambia rol)
-- [ ] Cambio de password desde UI (endpoint ya existe)
+- [ ] Cambio de password desde UI
 - [ ] Brute-force lockout en login (5 fallos → 15 min)
-- [ ] CORS_ORIGINS explícito en producción
+- [ ] Persistir calibración aplicada en YAML
+- [ ] Cleanup periódico de PDFs en data/reports
 
-### FASE 3 — Operaciones (P2)
-- [ ] **Alarmas ISA-18.2** con ACK persistente
-- [ ] **OEE** (disponibilidad × rendimiento × calidad)
-- [ ] **Mantenimiento predictivo** (horas marcha, próximo service por componente)
-- [ ] **Energía & costos** (kWh, gas, $/kg producido)
-- [ ] **Reportes PDF** mensuales (consumo, lotes, mermas, alarmas)
-
-### FASE 4 — Entrenamiento (P3)
-- [ ] **Modo replay** de CSV histórico a 10x
-- [ ] **Modo "qué pasaría si"** (bifurcar simulación)
-- [ ] **Escenarios de fallas** predefinidos para entrenamiento de operarios
+### Refinamientos técnicos
+- [ ] `hours_at_ack` en maintenance (mejorar precisión del comentario en operations.py)
+- [ ] Formula de gas_m3 más rigurosa (mover constantes a config)
+- [ ] OEE: produced_window con frágil división por 0.01 → usar ventanas reales basadas en histórico
 
 ## Cómo correr localmente
 
@@ -103,15 +94,4 @@ yarn start
 ```
 
 Usuarios por defecto idempotentes: **admin/admin** y **operario/operario**.
-
-## Comunicación industrial
-
-### OUT (publicar al SCADA/PLC)
-- Modbus TCP `0.0.0.0:5020` (7 unit IDs)
-- OPC UA `opc.tcp://0.0.0.0:4840/yerba/`
-- MQTT topics `yerba/{etapa}` (broker configurable)
-
-### IN (leer del PLC real)
-- Modbus TCP client → configurable IP/port/registros
-- OPC UA client → endpoint configurable
-- MQTT subscriber → topics `yerba_in/{etapa}/{var}` (JSON o número)
+PDFs: `backend/data/reports/`. CSVs históricos: `backend/data/`.

@@ -54,6 +54,7 @@ async def lifespan(app: FastAPI):
     await audit_service.ensure_indexes()
     await alarm_engine.ensure_indexes()
     await alarm_engine.load_rules()
+    await alarm_engine.rebuild_active_from_db()
     await ops_service.ensure_indexes()
     await ops_service.load()
     rt = get_runtime()
