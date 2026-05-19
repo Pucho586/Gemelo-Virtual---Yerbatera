@@ -19,11 +19,13 @@ from motor.motor_asyncio import AsyncIOMotorClient  # noqa: E402
 from pydantic import BaseModel, Field  # noqa: E402
 from starlette.middleware.cors import CORSMiddleware  # noqa: E402
 
+from twin.audit import AuditService  # noqa: E402
 from twin.auth import (  # noqa: E402
     create_access_token, create_refresh_token, decode_token, get_current_user,
     get_recovery_code, hash_password, seed_users, verify_password,
 )
 from twin.batches import BatchService  # noqa: E402
+from twin.calibration import apply_calibration_to_simulator, calibrate_from_csv  # noqa: E402
 from twin.recipes import apply_recipe_to_simulator, get_default_recipes  # noqa: E402
 from twin.runtime import get_runtime  # noqa: E402
 
@@ -35,6 +37,7 @@ mongo_url = os.environ["MONGO_URL"]
 mongo_client = AsyncIOMotorClient(mongo_url)
 db = mongo_client[os.environ["DB_NAME"]]
 batch_service = BatchService(db)
+audit_service = AuditService(db)
 
 
 # ---------- Lifespan ----------
@@ -42,6 +45,7 @@ batch_service = BatchService(db)
 async def lifespan(app: FastAPI):
     await seed_users(db)
     await batch_service.ensure_indexes()
+    await audit_service.ensure_indexes()
     rt = get_runtime()
     rt.start_all()
     await rt.start_async_services()
@@ -139,7 +143,7 @@ class ConfigPatch(BaseModel):
 
 
 class ModeBody(BaseModel):
-    mode: str  # "simulator" | "twin"
+    mode: str  # "simulator" | "twin" | "shadow"
 
 
 class ThroughputBody(BaseModel):
@@ -247,10 +251,11 @@ async def get_mode():
 
 
 @api.post("/mode")
-async def set_mode(body: ModeBody, user=Depends(admin_only)):
+async def set_mode(body: ModeBody, request: Request, user=Depends(admin_only)):
     rt = get_runtime()
     rt.simulator.set_mode(body.mode)
     rt.update_config({"simulacion": {"mode": body.mode}})
+    await audit_service.log(user["username"], "set_mode", {"mode": body.mode}, ip=request.client.host if request.client else None)
     return {"mode": body.mode}
 
 
@@ -471,6 +476,86 @@ async def export_excel(name: Optional[str] = None):
         raise HTTPException(404, str(e))
     return FileResponse(path, filename=path.name,
                         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ---------- FASE 2: External sources, drift, calibration, audit ----------
+class ExternalSourceBody(BaseModel):
+    enabled: Optional[bool] = None
+    host: Optional[str] = None
+    port: Optional[int] = None
+    interval: Optional[float] = None
+    endpoint: Optional[str] = None
+    broker: Optional[str] = None
+    user: Optional[str] = None
+    password: Optional[str] = None
+    topic_base: Optional[str] = None
+    namespace_idx: Optional[int] = None
+    mapping: Optional[Dict[str, Any]] = None
+
+
+class CalibrationApplyBody(BaseModel):
+    calibration: Dict[str, Any]
+
+
+@api.get("/external/status")
+async def external_status():
+    rt = get_runtime()
+    return {
+        "mirror": rt.mirror.snapshot(),
+        "drift": rt.last_drift,
+        "modbus_client": rt.service_status.get("modbus_client"),
+        "opcua_client": rt.service_status.get("opcua_client"),
+        "mqtt_subscriber": rt.service_status.get("mqtt_subscriber"),
+        "config": rt.config.get("external", {}),
+    }
+
+
+@api.post("/external/{section}")
+async def configure_external(section: str, body: ExternalSourceBody, request: Request, user=Depends(admin_only)):
+    if section not in ("modbus_client", "opcua_client", "mqtt_subscriber"):
+        raise HTTPException(404, "Sección desconocida")
+    rt = get_runtime()
+    kwargs = body.model_dump(exclude_none=True)
+    rt.reconfigure_external(section, **kwargs)
+    await audit_service.log(user["username"], f"configure_external.{section}", kwargs,
+                            ip=request.client.host if request.client else None)
+    return {"ok": True, "status": rt.service_status[section]}
+
+
+@api.get("/drift")
+async def get_drift():
+    return get_runtime().last_drift
+
+
+@api.post("/calibration/analyze")
+async def calibration_analyze(file_text: Dict[str, str], user=Depends(admin_only)):
+    """Body: {"csv": "ts,zap_temperatura,...\\n..."}.
+    Devuelve análisis sin aplicar."""
+    csv_text = file_text.get("csv", "")
+    if not csv_text:
+        raise HTTPException(400, "Falta 'csv'")
+    try:
+        result = calibrate_from_csv(csv_text, sample_interval_s=5.0)
+        return result
+    except Exception as e:
+        raise HTTPException(500, f"Error procesando CSV: {e}")
+
+
+@api.post("/calibration/apply")
+async def calibration_apply(body: CalibrationApplyBody, request: Request, user=Depends(admin_only)):
+    rt = get_runtime()
+    apply_calibration_to_simulator(rt.simulator, body.calibration)
+    await audit_service.log(user["username"], "calibration_apply", body.calibration,
+                            ip=request.client.host if request.client else None)
+    return {"ok": True}
+
+
+@api.get("/audit")
+async def audit_log(limit: int = 200, username: Optional[str] = None, user=Depends(current_user_dep)):
+    # Operario solo ve sus propias acciones; admin ve todo
+    if user.get("role") != "admin":
+        username = user["username"]
+    return await audit_service.list_recent(limit=limit, username=username)
 
 
 # ---------- WebSocket ----------

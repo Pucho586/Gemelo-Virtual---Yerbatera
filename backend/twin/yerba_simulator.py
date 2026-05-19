@@ -219,8 +219,8 @@ class YerbaProcessSimulator:
             self.weather_meta.update(meta)
 
     def set_mode(self, mode: str):
-        if mode not in ("simulator", "twin"):
-            raise ValueError("mode debe ser 'simulator' o 'twin'")
+        if mode not in ("simulator", "twin", "shadow"):
+            raise ValueError("mode debe ser 'simulator', 'twin' o 'shadow'")
         with self.lock:
             self.mode = mode
 
@@ -278,7 +278,7 @@ class YerbaProcessSimulator:
         dt = dt_real * self.aceleracion
 
         with self.lock:
-            if self.mode == "simulator":
+            if self.mode in ("simulator", "shadow"):
                 self.zapecado.update(dt, self.ambient_temp)
                 self.secado.update(dt, self.ambient_temp, self.ambient_humidity)
                 self.canchado.update(dt)

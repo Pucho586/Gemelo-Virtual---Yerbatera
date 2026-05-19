@@ -1,0 +1,44 @@
+{
+  "summary": "FASE 2 Industria 4.0 testing complete - 100% backend + frontend pass. Backend: 18/18 new pytest cases en test_fase2_external.py PASS (external/status, modbus client closed-loop con 17 tags poblados en mirror, drift en modo shadow con fields sim/ext/delta/pct, twin sync, opcua_client endpoint, mqtt_subscriber endpoint, calibration analyze+apply con CSV mínimo, audit log con filtro por rol, regresión state/services/recipes/batches). Backend regresión 48/48 anteriores también PASS - total 66/66. Frontend (live preview): tab Industria 4.0 visible para ambos roles, sub-tabs (sources, drift, calib, audit) navegables; cliente Modbus muestra 17 mirror-row-* en vivo tras habilitar; mode-switch cicla Simulador → Shadow (azul) → Gemelo (amber) → Simulador correctamente; drift-row-* poblado en modo shadow (17 filas); calibración CSV → Analizar → Aplicar funciona; audit-row-* muestra 15 eventos para admin, 0 para operario (filtrado correcto por backend). Operario tiene Aplicar deshabilitado en todos los formularios (mb-cli-save, calib-analyze). Regresión: dashboard/recetas/lotes siguen clickeables.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/calibration/analyze", "issue": "El error 500 al procesar CSV malformado retorna detail con f-string del exception interno (information disclosure menor). Sugerir mensaje genérico + log interno."},
+      {"endpoint": "/api/external/{section}", "issue": "El campo Pydantic 'user' colisiona semánticamente con el parámetro de dependencia 'user' (es config field para MQTT username). Funciona OK pero confunde el código."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Industria 4.0 - Fuentes externas", "issues": ["Toggle 'Habilitado' es un div estilizado, no <input type=checkbox>. Accesibilidad: agregar role=switch + aria-checked para lectores de pantalla."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_fase2_external.py",
+    "/app/backend/tests/test_auth_recipes_batches.py",
+    "/app/backend/tests/test_yerba_api.py",
+    "/app/test_reports/pytest/iteration_4_fase2.xml"
+  ],
+  "action_items": [
+    "No HIGH/CRITICAL items. Solo hardening: (1) generic error message en /api/calibration/analyze, (2) renombrar Pydantic field 'user' a 'mqtt_user' en ExternalSourceBody para evitar colisión semántica, (3) aria-attrs en toggle 'Habilitado' de Industria 4.0."
+  ],
+  "critical_code_review_comments": [
+    "Closed-loop Modbus client (127.0.0.1:5020 → propio servidor) funciona perfecto: 17 tags polleados en <6s con interval=2s. Mirror.errors permanece vacío.",
+    "_external_apply_loop() correctamente solo escribe sim en modo 'twin' y calcula drift en 'twin'+'shadow'. last_drift se limpia en modo 'simulator'.",
+    "Audit log filtra por username cuando user.role != 'admin' (server.py:557). Operario vio 0 filas en UI (correcto, no había generado eventos auditables todavía).",
+    "Operario UI correctamente bloqueado: mb-cli-save, op-cli-save, mq-save, calib-analyze, calib-apply todos disabled=true. Backend reenforza con 403 en POST /external/*, /calibration/* y /mode (verificado).",
+    "calibration_apply persiste cambios en simulator pero NO guarda en config YAML/Mongo. Si se reinicia el backend se pierde la calibración. Considerar persistir en config['calibration'].",
+    "compute_drift maneja correctamente paths anidados de cámaras ('cam0.temperatura' → state['camaras'][0]['temperatura'])."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_fase2_external.py (nuevo, 18 tests)"
+  ],
+  "success_rate": {"backend": "100% (66/66 incluyendo 18 nuevos FASE 2)", "frontend": "100% de los flujos solicitados (sources, drift, calib, audit, mode-switch 3-way, RBAC, regresión)"},
+  "test_credentials": "admin/admin, operario/operario, recovery: yerbatera-recovery-2026 (sin cambios)",
+  "seed_data_creation": "Eventos audit generados durante testing: set_mode (shadow/twin/simulator), configure_external.modbus_client, configure_external.opcua_client, configure_external.mqtt_subscriber, calibration_apply. Mode quedó restaurado en 'simulator' al final.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "FASE 2 Industria 4.0 100% verde. Para regresión, ejecutar: pytest backend/tests/ -v (66 tests). Closed-loop Modbus requiere que start_modbus() corra primero (servidor en 5020). Si el test test_admin_enable_and_mirror_populates falla, verificar que pymodbus AsyncModbusTcpClient siga importable y que el servidor Modbus interno (rt.modbus) esté en running=true via /api/services/status. Testids clave: tab-i40, i40-tab-{sources,drift,calib,audit}, mb-cli-{host,port,enabled,save}, op-cli-{endpoint,enabled,save}, mq-{broker,port,enabled,save}, calib-csv-input, calib-analyze, calib-apply, mirror-row-{tag}, drift-row-{i}, audit-row-{i}, mode-switch.",
+  "rca of the issue": "Sin issues abiertas en esta iteración. Todas las features de FASE 2 funcionan según spec."
+}

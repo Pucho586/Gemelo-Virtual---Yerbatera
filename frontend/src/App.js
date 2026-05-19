@@ -14,7 +14,8 @@ import AIPanel from './components/AIPanel';
 import ConfigView from './components/ConfigView';
 import RecetasView from './components/RecetasView';
 import LotesView from './components/LotesView';
-import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot } from '@phosphor-icons/react';
+import Industria40View from './components/Industria40View';
+import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs } from '@phosphor-icons/react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', Icon: House, role: 'any' },
@@ -24,6 +25,7 @@ const TABS = [
   { id: 'camaras', label: 'Cámaras', Icon: Cloud, role: 'any' },
   { id: 'recetas', label: 'Recetas', Icon: ForkKnife, role: 'any' },
   { id: 'lotes', label: 'Lotes', Icon: Package, role: 'any' },
+  { id: 'i40', label: 'Industria 4.0', Icon: Plugs, role: 'any' },
   { id: 'ia', label: 'IA · Gemini', Icon: Sparkle, role: 'any' },
   { id: 'config', label: 'Configuración', Icon: Gear, role: 'admin' },
 ];
@@ -53,7 +55,8 @@ function AuthedApp() {
 
   const toggleMode = async () => {
     if (!isAdmin(user)) return;
-    const next = mode === 'simulator' ? 'twin' : 'simulator';
+    // 3-way cycle: simulator → shadow → twin → simulator
+    const next = mode === 'simulator' ? 'shadow' : mode === 'shadow' ? 'twin' : 'simulator';
     try {
       await api.setMode(next);
       setMode(next);
@@ -61,6 +64,13 @@ function AuthedApp() {
       alert(e?.response?.data?.detail || 'Error');
     }
   };
+
+  const modeMeta = {
+    simulator: { label: 'Simulador', cls: 'bg-green-500/10 text-green-400 border-green-500/30', Icon: Robot },
+    shadow:    { label: 'Shadow',    cls: 'bg-blue-500/10 text-blue-300 border-blue-500/30', Icon: Cpu },
+    twin:      { label: 'Gemelo',    cls: 'bg-amber-300/15 text-amber-300 border-amber-300/40', Icon: Cpu },
+  };
+  const mm = modeMeta[mode] || modeMeta.simulator;
 
   const toggleMimic = () => {
     const next = mimicStyle === 'svg' ? 'pid' : 'svg';
@@ -89,10 +99,10 @@ function AuthedApp() {
               data-testid="mode-switch"
               onClick={toggleMode}
               disabled={!isAdmin(user)}
-              className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${mode === 'twin' ? 'bg-amber-300/15 text-amber-300 border-amber-300/40' : 'bg-green-500/10 text-green-400 border-green-500/30'}`}
-              title={isAdmin(user) ? 'Cambiar modo' : 'Requiere admin'}
+              className={`inline-flex items-center gap-2 px-3 py-1.5 text-xs font-mono uppercase tracking-wider border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${mm.cls}`}
+              title={isAdmin(user) ? 'Ciclar modo: Simulador → Shadow → Gemelo' : 'Requiere admin'}
             >
-              {mode === 'twin' ? <><Cpu size={13} weight="duotone" /> Modo Gemelo</> : <><Robot size={13} weight="duotone" /> Modo Simulador</>}
+              <mm.Icon size={13} weight="duotone" /> Modo {mm.label}
             </button>
             <StatusBadge state={connected ? 'online' : 'warning'} label={connected ? 'WS' : 'POLL'} testid="conn-badge" />
             <StatusBadge state={status?.modbus?.running ? 'online' : 'offline'} label="Modbus" testid="modbus-badge" />
@@ -132,6 +142,7 @@ function AuthedApp() {
         <div style={{ display: tab === 'camaras' ? 'block' : 'none' }}><CamarasView state={state} series={series} mimicStyle={mimicStyle} /></div>
         <div style={{ display: tab === 'recetas' ? 'block' : 'none' }}><RecetasView /></div>
         <div style={{ display: tab === 'lotes' ? 'block' : 'none' }}><LotesView /></div>
+        <div style={{ display: tab === 'i40' ? 'block' : 'none' }}><Industria40View /></div>
         <div style={{ display: tab === 'ia' ? 'block' : 'none' }}><AIPanel /></div>
         {isAdmin(user) && (
           <div style={{ display: tab === 'config' ? 'block' : 'none' }}><ConfigView status={status} /></div>
@@ -140,7 +151,7 @@ function AuthedApp() {
 
       <footer className="max-w-[1920px] mx-auto px-4 sm:px-6 lg:px-8 py-6 border-t mt-8" style={{ borderColor: 'var(--border)' }}>
         <div className="flex flex-wrap items-center justify-between gap-3 font-mono text-[10px] text-slate-500 uppercase tracking-wider">
-          <span>Yerbatera Twin · {mode === 'twin' ? 'Lectura de fuente externa' : 'Simulación matemática'} · Gemini 3 Flash · Open-Meteo</span>
+          <span>Yerbatera Twin · {mode === 'twin' ? 'Lectura de fuente externa' : mode === 'shadow' ? 'Simulación + comparación con PLC' : 'Simulación matemática'} · Gemini 3 Flash · Open-Meteo</span>
           <span>{state?.ts ? new Date(state.ts).toLocaleTimeString() : '–'}</span>
         </div>
       </footer>

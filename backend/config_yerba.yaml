@@ -68,3 +68,18 @@ weather:
 persistence:
   enabled: true
   interval_seconds: 10
+external:
+  modbus_client:
+    enabled: true
+    host: 127.0.0.1
+    port: 5020
+    interval: 2.0
+  opcua_client:
+    enabled: true
+    interval: 2.0
+    endpoint: opc.tcp://127.0.0.1:4840/yerba/
+  mqtt_subscriber:
+    enabled: true
+    port: 1883
+    broker: localhost
+    topic_base: yerba_in

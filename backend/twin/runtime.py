@@ -9,6 +9,10 @@ from typing import Any, Dict
 import yaml
 
 from .ai_service import AIService
+from .external_sources import (
+    ExternalMirror, ModbusClientPoller, MqttSubscriber, OpcUaClientPoller,
+    compute_drift, push_external_to_simulator,
+)
 from .mqtt_publisher import YerbaMqttPublisher
 from .opcua_server import YerbaOpcUaServer
 from .persistence import PersistenceService
@@ -30,6 +34,11 @@ def load_config() -> Dict[str, Any]:
                                "longitude": DEFAULT_LOCATION["longitude"],
                                "city": DEFAULT_LOCATION["city"]})
     cfg.setdefault("persistence", {"enabled": True, "interval_seconds": 5})
+    cfg.setdefault("external", {
+        "modbus_client": {"enabled": False, "host": "127.0.0.1", "port": 5020, "interval": 2.0},
+        "opcua_client": {"enabled": False, "endpoint": "opc.tcp://127.0.0.1:4840/yerba/", "interval": 2.0, "namespace_idx": 2},
+        "mqtt_subscriber": {"enabled": False, "broker": "localhost", "port": 1883, "topic_base": "yerba_in"},
+    })
     return cfg
 
 
@@ -55,6 +64,14 @@ class TwinRuntime:
         self.weather: WeatherService | None = None
         self.persistence: PersistenceService | None = None
 
+        # Fuentes externas (modo twin/shadow)
+        self.mirror = ExternalMirror()
+        self.modbus_client: ModbusClientPoller | None = None
+        self.opcua_client: OpcUaClientPoller | None = None
+        self.mqtt_subscriber: MqttSubscriber | None = None
+        self._external_loop_task: asyncio.Task | None = None
+        self.last_drift: Dict[str, Any] = {}
+
         # Threads industriales
         self._sim_thread: threading.Thread | None = None
         self._modbus_thread: threading.Thread | None = None
@@ -67,6 +84,9 @@ class TwinRuntime:
             "opcua": {"running": False, "error": None, "endpoint": None},
             "weather": {"running": False, "error": None, "city": None},
             "persistence": {"running": False, "error": None, "interval": None},
+            "modbus_client": {"running": False, "error": None, "host": None, "port": None},
+            "opcua_client": {"running": False, "error": None, "endpoint": None},
+            "mqtt_subscriber": {"running": False, "error": None, "broker": None},
         }
 
     # ---------- Bucle de simulación ----------
@@ -185,6 +205,78 @@ class TwinRuntime:
         except Exception as e:
             self.service_status["persistence"] = {"running": False, "error": str(e), "interval": None}
             logger.warning(f"Persistence init failed: {e}")
+
+        # External sources
+        await self._start_external_sources()
+
+    async def _start_external_sources(self):
+        ext_cfg = self.config.get("external", {})
+        # Modbus client
+        mb_cfg = ext_cfg.get("modbus_client", {})
+        self.modbus_client = ModbusClientPoller(self.mirror, mb_cfg)
+        self.modbus_client.start()
+        self.service_status["modbus_client"] = {
+            "running": mb_cfg.get("enabled", False), "error": None,
+            "host": mb_cfg.get("host"), "port": mb_cfg.get("port"),
+        }
+        # OPC UA client
+        op_cfg = ext_cfg.get("opcua_client", {})
+        self.opcua_client = OpcUaClientPoller(self.mirror, op_cfg)
+        self.opcua_client.start()
+        self.service_status["opcua_client"] = {
+            "running": op_cfg.get("enabled", False), "error": None,
+            "endpoint": op_cfg.get("endpoint"),
+        }
+        # MQTT subscriber
+        ms_cfg = ext_cfg.get("mqtt_subscriber", {})
+        self.mqtt_subscriber = MqttSubscriber(self.mirror, ms_cfg)
+        self.mqtt_subscriber.start()
+        self.service_status["mqtt_subscriber"] = {
+            "running": ms_cfg.get("enabled", False), "error": None,
+            "broker": ms_cfg.get("broker"),
+        }
+        # Loop de aplicación / drift
+        self._external_loop_task = asyncio.get_event_loop().create_task(self._external_apply_loop())
+
+    async def _external_apply_loop(self):
+        """En modo twin: empuja mirror al simulador. En modo shadow: solo calcula drift."""
+        while True:
+            try:
+                mode = self.simulator.mode
+                if mode == "twin" and self.mirror.values:
+                    push_external_to_simulator(self.mirror, self.simulator)
+                if mode in ("twin", "shadow") and self.mirror.values:
+                    state = self.simulator.get_state()
+                    self.last_drift = compute_drift(state, self.mirror)
+                else:
+                    self.last_drift = {}
+            except Exception as e:
+                logger.debug(f"external apply loop: {e}")
+            await asyncio.sleep(1.0)
+
+    def reconfigure_external(self, section: str, **kwargs):
+        """Reconfigura una fuente externa en caliente."""
+        if section == "modbus_client" and self.modbus_client:
+            self.modbus_client.reconfigure(**kwargs)
+            self.service_status["modbus_client"].update({
+                "running": self.modbus_client.enabled,
+                "host": self.modbus_client.host,
+                "port": self.modbus_client.port,
+            })
+        elif section == "opcua_client" and self.opcua_client:
+            self.opcua_client.reconfigure(**kwargs)
+            self.service_status["opcua_client"].update({
+                "running": self.opcua_client.enabled,
+                "endpoint": self.opcua_client.endpoint,
+            })
+        elif section == "mqtt_subscriber" and self.mqtt_subscriber:
+            self.mqtt_subscriber.reconfigure(**kwargs)
+            self.service_status["mqtt_subscriber"].update({
+                "running": self.mqtt_subscriber.enabled,
+                "broker": self.mqtt_subscriber.broker,
+            })
+        # Persistir en config
+        self.update_config({"external": {section: kwargs}})
 
     # ---------- Vida ----------
     def start_all(self):

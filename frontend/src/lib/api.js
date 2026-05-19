@@ -65,6 +65,13 @@ export const api = {
   createBatch: (body) => http.post('/batches', body).then(r => r.data),
   closeBatch: (id, body) => http.post(`/batches/${id}/close`, body).then(r => r.data),
   cancelBatch: (id) => http.post(`/batches/${id}/cancel`).then(r => r.data),
+  // FASE 2: External sources, drift, calibration, audit
+  externalStatus: () => http.get('/external/status').then(r => r.data),
+  configureExternal: (section, body) => http.post(`/external/${section}`, body).then(r => r.data),
+  getDrift: () => http.get('/drift').then(r => r.data),
+  calibrationAnalyze: (csv) => http.post('/calibration/analyze', { csv }).then(r => r.data),
+  calibrationApply: (calibration) => http.post('/calibration/apply', { calibration }).then(r => r.data),
+  auditLog: (limit = 200, username = null) => http.get(`/audit?limit=${limit}${username ? `&username=${username}` : ''}`).then(r => r.data),
   // Data
   listDataFiles: () => http.get('/data/files').then(r => r.data),
   downloadCsvUrl: (name) => `${API}/data/download/${encodeURIComponent(name)}`,
