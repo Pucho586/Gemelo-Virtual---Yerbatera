@@ -24,6 +24,11 @@ DEFAULT_PRICES = {
     "kg_yerba_venta_ars": 3500.0,
 }
 
+# Poder calorífico de los chips de madera (MJ/kg). Referencia: madera seca ~17 MJ/kg.
+# Editable por planta (chips más secos ≈ 18-19, más húmedos ≈ 14-15).
+DEFAULT_CHIP_CALORIFIC_MJ_KG = 17.0
+BASE_CHIP_CALORIFIC_MJ_KG = 17.0  # Referencia para escalar el consumo si la planta usa otro tipo
+
 # Configuración de turnos (cantidad y duración) para calcular tiempo planificado
 DEFAULT_SHIFTS = {
     "shifts_per_day": 3,
@@ -71,6 +76,8 @@ class OperationsService:
         # Configuración de turnos
         self.shifts_per_day: int = DEFAULT_SHIFTS["shifts_per_day"]
         self.hours_per_shift: float = DEFAULT_SHIFTS["hours_per_shift"]
+        # Poder calorífico de los chips (MJ/kg). Editable.
+        self.chip_calorific_mj_kg: float = DEFAULT_CHIP_CALORIFIC_MJ_KG
 
     async def ensure_indexes(self):
         await self.db.ops_state.create_index("id", unique=True)
@@ -99,6 +106,7 @@ class OperationsService:
             self.maint_acks = doc.get("maint_acks", {})
             self.shifts_per_day = int(doc.get("shifts_per_day", DEFAULT_SHIFTS["shifts_per_day"]))
             self.hours_per_shift = float(doc.get("hours_per_shift", DEFAULT_SHIFTS["hours_per_shift"]))
+            self.chip_calorific_mj_kg = float(doc.get("chip_calorific_mj_kg", DEFAULT_CHIP_CALORIFIC_MJ_KG))
 
     async def save(self):
         await self.db.ops_state.replace_one(
@@ -115,6 +123,7 @@ class OperationsService:
                 "maint_acks": self.maint_acks,
                 "shifts_per_day": self.shifts_per_day,
                 "hours_per_shift": self.hours_per_shift,
+                "chip_calorific_mj_kg": self.chip_calorific_mj_kg,
                 "updated_at": now_iso(),
             },
             upsert=True,
@@ -133,10 +142,12 @@ class OperationsService:
             self.runtime_hours["tambor_zapecado"] += dt_h
             self.kwh_accum["tambor_zapecado"] += COMPONENT_POWER_KW["tambor_zapecado"] * dt_h
             # Chips de madera (combustible): proporcional al delta temp respecto ambiente.
-            # Estimación: 1.8 kg/h por cada 100°C arriba del ambiente (poder calorífico ~17 MJ/kg).
+            # Base: 1.8 kg/h por cada 100°C arriba del ambiente, asumiendo PCI = 17 MJ/kg.
+            # Se reescala si la planta usa chips de distinto poder calorífico.
             amb = state.get("ambient", {}).get("temp", 25)
             t = z.get("temperatura", 0)
-            chips_rate = max(0.0, (t - amb) / 100.0 * 1.8)
+            cal = self.chip_calorific_mj_kg if self.chip_calorific_mj_kg > 0 else BASE_CHIP_CALORIFIC_MJ_KG
+            chips_rate = max(0.0, (t - amb) / 100.0 * 1.8 * (BASE_CHIP_CALORIFIC_MJ_KG / cal))
             self.chips_kg_accum += chips_rate * dt_h
         if s.get("estado"):
             self.runtime_hours["secador"] += dt_h
@@ -160,7 +171,7 @@ class OperationsService:
         return sum(self.kwh_accum.values())
 
     def energy_cost_ars(self) -> float:
-        return self.total_kwh() * self.prices["kwh_ars"] + self.gas_m3_accum * self.prices["m3_gas_ars"]
+        return self.total_kwh() * self.prices["kwh_ars"] + self.chips_kg_accum * self.prices["kg_chips_ars"]
 
     def revenue_ars(self) -> float:
         return self.kg_produced * self.prices["kg_yerba_venta_ars"]
@@ -258,6 +269,9 @@ class OperationsService:
         for k in ("kwh_ars", "kg_chips_ars", "kg_yerba_venta_ars"):
             if k in prices and prices[k] is not None:
                 self.prices[k] = float(prices[k])
+        # Poder calorífico del chip (no es precio, pero viaja en el mismo body por simplicidad)
+        if "chip_calorific_mj_kg" in prices and prices["chip_calorific_mj_kg"] is not None:
+            self.chip_calorific_mj_kg = max(5.0, min(25.0, float(prices["chip_calorific_mj_kg"])))
 
     def update_shifts(self, shifts_per_day: Optional[int] = None, hours_per_shift: Optional[float] = None):
         if shifts_per_day is not None:

@@ -191,7 +191,9 @@ function OeePanel() {
 // ============================ MAINTENANCE ============================
 function MaintPanel({ admin }) {
   const [data, setData] = useState(null);
-  const load = () => api.getMaintenance().then(setData);
+  const [editThr, setEditThr] = useState(false);
+  const [thr, setThr] = useState({});
+  const load = () => api.getMaintenance().then(d => { setData(d); });
   useEffect(() => { load(); const id = setInterval(load, 8000); return () => clearInterval(id); }, []);
 
   const ack = async (component, action) => {
@@ -200,8 +202,31 @@ function MaintPanel({ admin }) {
     load();
   };
 
+  // Construir matriz de thresholds desde items
+  const buildThresholdsMatrix = () => {
+    const m = {};
+    (data?.items || []).forEach(it => {
+      m[it.componente] = m[it.componente] || {};
+      m[it.componente][it.accion] = it.umbral_h;
+    });
+    return m;
+  };
+
+  const startEditThr = () => {
+    setThr(buildThresholdsMatrix());
+    setEditThr(true);
+  };
+
+  const saveThr = async () => {
+    await api.setThresholds(thr);
+    setEditThr(false);
+    load();
+  };
+
   if (!data) return <div className="p-10 text-slate-500 font-mono">Cargando...</div>;
   const items = data.items || [];
+  const components = Array.from(new Set(items.map(i => i.componente)));
+  const actions = ['lubricacion', 'rulemanes', 'overhaul'];
 
   return (
     <div className="space-y-px">
@@ -233,6 +258,46 @@ function MaintPanel({ admin }) {
           );
         })}
       </Card>
+
+      {admin && (
+        <Card className="p-5" testid="maint-thresholds">
+          <div className="flex items-center justify-between mb-3">
+            <SectionTitle kicker="02">Umbrales de mantenimiento (horas)</SectionTitle>
+            {!editThr && <Btn testid="maint-thr-edit" variant="secondary" onClick={startEditThr}>Editar</Btn>}
+          </div>
+          {!editThr ? (
+            <p className="text-xs text-slate-500 font-mono">Ajustá las horas de marcha que disparan lubricación, cambio de rulemanes y overhaul por componente.</p>
+          ) : (
+            <div className="space-y-3">
+              <div className="grid grid-cols-4 gap-2 px-2 py-1 border-b font-mono text-[10px] uppercase tracking-wider text-slate-500" style={{ borderColor: 'var(--border)' }}>
+                <span>Componente</span>
+                {actions.map(a => <span key={a}>{a}</span>)}
+              </div>
+              {components.map((comp) => (
+                <div key={comp} className="grid grid-cols-4 gap-2 items-center font-mono text-xs">
+                  <span className="text-slate-200">{comp}</span>
+                  {actions.map((a) => (
+                    <NumberInput
+                      key={`${comp}-${a}`}
+                      testid={`thr-${comp}-${a}`}
+                      label=""
+                      unit="h"
+                      step={50}
+                      min={50}
+                      value={thr[comp]?.[a] ?? ''}
+                      onChange={(v) => setThr({ ...thr, [comp]: { ...(thr[comp] || {}), [a]: v } })}
+                    />
+                  ))}
+                </div>
+              ))}
+              <div className="flex gap-2 pt-2">
+                <Btn testid="maint-thr-save" onClick={saveThr}>Guardar umbrales</Btn>
+                <Btn testid="maint-thr-cancel" variant="secondary" onClick={() => setEditThr(false)}>Cancelar</Btn>
+              </div>
+            </div>
+          )}
+        </Card>
+      )}
     </div>
   );
 }
@@ -242,13 +307,25 @@ function EnergyPanel({ admin }) {
   const [data, setData] = useState(null);
   const [prices, setPrices] = useState({});
   const [editing, setEditing] = useState(false);
+  const [shifts, setShifts] = useState({});
+  const [editingShifts, setEditingShifts] = useState(false);
 
-  const load = () => api.getEnergy().then(d => { setData(d); setPrices(d.prices); });
+  const load = () => api.getEnergy().then(d => {
+    setData(d);
+    setPrices({ ...d.prices, chip_calorific_mj_kg: d.chip_calorific_mj_kg });
+    setShifts({ shifts_per_day: d.shifts_per_day, hours_per_shift: d.hours_per_shift });
+  });
   useEffect(() => { load(); const id = setInterval(load, 6000); return () => clearInterval(id); }, []);
 
   const save = async () => {
     await api.setPrices(prices);
     setEditing(false);
+    load();
+  };
+
+  const saveShifts = async () => {
+    await api.setShifts(shifts);
+    setEditingShifts(false);
     load();
   };
 
@@ -266,7 +343,7 @@ function EnergyPanel({ admin }) {
         <SectionTitle kicker="01">Energía y costos</SectionTitle>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-px hair-grid mt-3">
           <div className="surface p-4" data-testid="energy-kwh"><Metric label="Total kWh" value={data.total_kwh.toFixed(1)} unit="kWh" color="var(--amber)" big /></div>
-          <div className="surface p-4" data-testid="energy-gas"><Metric label="Gas natural" value={data.gas_m3.toFixed(1)} unit="m³" color="#FCA5A5" big /></div>
+          <div className="surface p-4" data-testid="energy-chips"><Metric label="Chips de madera" value={data.chips_kg.toFixed(1)} unit="kg" color="#FCA5A5" big /></div>
           <div className="surface p-4" data-testid="energy-cost"><Metric label="Costo total" value={`$${(data.energy_cost_ars).toLocaleString('es-AR', { maximumFractionDigits: 0 })}`} unit="ARS" color="#86EFAC" big /></div>
           <div className="surface p-4" data-testid="energy-cost-per-kg"><Metric label="Costo / kg" value={`$${data.cost_per_kg_ars.toFixed(0)}`} unit="ARS" color="#93C5FD" big /></div>
           <div className="surface p-4" data-testid="energy-produced"><Metric label="Producción" value={data.kg_produced.toFixed(0)} unit="kg" color="var(--text)" /></div>
@@ -278,23 +355,50 @@ function EnergyPanel({ admin }) {
 
       <Card className="p-5" testid="energy-prices">
         <div className="flex items-center justify-between mb-3">
-          <SectionTitle kicker="02">Precios de referencia</SectionTitle>
+          <SectionTitle kicker="02">Precios y poder calorífico</SectionTitle>
           {admin && !editing && <Btn testid="prices-edit" variant="secondary" onClick={() => setEditing(true)}>Editar</Btn>}
         </div>
         {!editing ? (
-          <div className="grid grid-cols-3 gap-px hair-grid">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-px hair-grid">
             <div className="surface p-4"><Metric label="kWh industrial" value={`$${data.prices.kwh_ars}`} unit="ARS" /></div>
-            <div className="surface p-4"><Metric label="m³ gas natural" value={`$${data.prices.m3_gas_ars}`} unit="ARS" /></div>
-            <div className="surface p-4"><Metric label="kg yerba venta" value={`$${data.prices.kg_yerba_venta_ars}`} unit="ARS" /></div>
+            <div className="surface p-4"><Metric label="kg chips de madera" value={`$${data.prices.kg_chips_ars}`} unit="ARS" /></div>
+            <div className="surface p-4"><Metric label="kg yerba (venta)" value={`$${data.prices.kg_yerba_venta_ars}`} unit="ARS" /></div>
+            <div className="surface p-4"><Metric label="PCI chips" value={data.chip_calorific_mj_kg?.toFixed(1) || '17.0'} unit="MJ/kg" /></div>
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <NumberInput testid="price-kwh" label="kWh ARS" value={prices.kwh_ars} onChange={(v) => setPrices({ ...prices, kwh_ars: v })} />
+            <NumberInput testid="price-chips" label="kg chips ARS" value={prices.kg_chips_ars} onChange={(v) => setPrices({ ...prices, kg_chips_ars: v })} />
+            <NumberInput testid="price-yerba" label="kg yerba venta ARS" value={prices.kg_yerba_venta_ars} onChange={(v) => setPrices({ ...prices, kg_yerba_venta_ars: v })} />
+            <NumberInput testid="price-calorific" label="PCI chips" unit="MJ/kg" step={0.5} min={5} max={25} value={prices.chip_calorific_mj_kg ?? data.chip_calorific_mj_kg ?? 17} onChange={(v) => setPrices({ ...prices, chip_calorific_mj_kg: v })} />
+            <div className="col-span-2 md:col-span-4 flex gap-2">
+              <Btn testid="prices-save" onClick={save}>Guardar</Btn>
+              <Btn testid="prices-cancel" variant="secondary" onClick={() => { setEditing(false); setPrices({ ...data.prices, chip_calorific_mj_kg: data.chip_calorific_mj_kg }); }}>Cancelar</Btn>
+            </div>
+            <p className="col-span-2 md:col-span-4 text-[11px] font-mono text-slate-500">PCI = poder calorífico inferior de los chips. Madera seca ≈ 17 MJ/kg, más húmeda 14-15, muy seca 18-19.</p>
+          </div>
+        )}
+      </Card>
+
+      <Card className="p-5" testid="energy-shifts">
+        <div className="flex items-center justify-between mb-3">
+          <SectionTitle kicker="03">Turnos planificados (base OEE)</SectionTitle>
+          {admin && !editingShifts && <Btn testid="shifts-edit" variant="secondary" onClick={() => setEditingShifts(true)}>Editar</Btn>}
+        </div>
+        {!editingShifts ? (
+          <div className="grid grid-cols-3 gap-px hair-grid">
+            <div className="surface p-4"><Metric label="Turnos / día" value={data.shifts_per_day} unit="turnos" /></div>
+            <div className="surface p-4"><Metric label="Horas / turno" value={data.hours_per_shift?.toFixed(1)} unit="h" /></div>
+            <div className="surface p-4"><Metric label="Horas planificadas / día" value={data.planned_hours_per_day?.toFixed(1)} unit="h" color="var(--amber)" /></div>
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-3">
-            <NumberInput testid="price-kwh" label="kWh ARS" value={prices.kwh_ars} onChange={(v) => setPrices({ ...prices, kwh_ars: v })} />
-            <NumberInput testid="price-gas" label="m³ gas ARS" value={prices.m3_gas_ars} onChange={(v) => setPrices({ ...prices, m3_gas_ars: v })} />
-            <NumberInput testid="price-yerba" label="kg yerba venta ARS" value={prices.kg_yerba_venta_ars} onChange={(v) => setPrices({ ...prices, kg_yerba_venta_ars: v })} />
+            <NumberInput testid="shifts-per-day" label="Turnos / día" value={shifts.shifts_per_day} step={1} min={1} max={4} onChange={(v) => setShifts({ ...shifts, shifts_per_day: v })} />
+            <NumberInput testid="hours-per-shift" label="Horas / turno" value={shifts.hours_per_shift} step={0.5} min={1} max={24} unit="h" onChange={(v) => setShifts({ ...shifts, hours_per_shift: v })} />
+            <div className="surface p-4"><Metric label="Resulta" value={(Number(shifts.shifts_per_day) * Number(shifts.hours_per_shift)).toFixed(1)} unit="h plan/día" /></div>
             <div className="col-span-3 flex gap-2">
-              <Btn testid="prices-save" onClick={save}>Guardar</Btn>
-              <Btn testid="prices-cancel" variant="secondary" onClick={() => { setEditing(false); setPrices(data.prices); }}>Cancelar</Btn>
+              <Btn testid="shifts-save" onClick={saveShifts}>Guardar</Btn>
+              <Btn testid="shifts-cancel" variant="secondary" onClick={() => { setEditingShifts(false); setShifts({ shifts_per_day: data.shifts_per_day, hours_per_shift: data.hours_per_shift }); }}>Cancelar</Btn>
             </div>
           </div>
         )}

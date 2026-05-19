@@ -149,7 +149,7 @@ class TestEnergy:
         r = requests.get(f"{API}/energy", timeout=10)
         assert r.status_code == 200
         d = r.json()
-        for k in ("total_kwh", "gas_m3", "energy_cost_ars", "cost_per_kg_ars",
+        for k in ("total_kwh", "chips_kg", "energy_cost_ars", "cost_per_kg_ars",
                   "margin_per_kg_ars", "runtime_hours", "kwh_by_component"):
             assert k in d, f"falta {k}"
 

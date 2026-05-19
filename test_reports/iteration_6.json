@@ -1,0 +1,43 @@
+{
+  "summary": "Iteration 6: validated migration de 'gas natural' → 'chips de madera' + nuevos parámetros editables (PCI MJ/kg, turnos, umbrales de mantenimiento). Backend: 8/8 nuevos tests (test_iter6_chips.py) PASS + regresión FASE 3 22/22 (después de actualizar 1 test viejo que aún esperaba 'gas_m3'). Frontend: login admin OK, tab Operaciones → sub-tabs Energía y Mantenimiento renderizan correctamente. Confirmado por UI+API integration: edit PCI 17→19 persiste, edit turnos 3×8 → 2×6 persiste (planned_hours = 12). Maint-thresholds card visible y editable. NINGUNA referencia a 'gas natural' o 'm³ gas' en /api/energy ni en el panel de Energía. Reporte mensual PDF contiene literalmente 'Chips de madera' (verificado descomprimiendo el stream FlateDecode con pypdf). RBAC verificado: POST /energy/prices, /ops/shifts, /maintenance/thresholds devuelven 401 sin token y 403 con operario.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/energy (test legacy)", "issue": "test_fase3_ops.py:152 todavía esperaba clave 'gas_m3' (legacy). Actualizado a 'chips_kg' por este agente durante regresión."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iter6_chips.py",
+    "/app/test_reports/pytest/iteration_6_chips.xml",
+    "/app/test_reports/pytest/iteration_6_fase3_regression.xml"
+  ],
+  "action_items": [
+    "Ninguna HIGH/CRITICAL. Migración chips-de-madera completa y bug original (energy_cost_ars crash por gas_m3_accum) confirmado fixed: /api/energy retorna 200 con energy_cost_ars numérico bajo escenarios de stress (incluyendo cambio de PCI 17→19, turnos 2×6, etc.).",
+    "OPCIONAL: revisar OperacionesView.jsx EnergyPanel: el badge superior dice '1 ALARMA' constante (zapecado_temp_high) — aparece por valor cercano al límite, normal del simulador.",
+    "OPCIONAL: en OperacionesView.jsx, NumberInput component coloca data-testid en el INPUT (para price-kwh/chips/yerba/calorific, shifts-per-day, hours-per-shift) PERO en thr-<comp>-<action> el testid parece estar en el WRAPPER (selector input[data-testid=...] no encontró el elemento). Inconsistencia menor de testing — funcionalidad UI/backend verificada igual."
+  ],
+  "critical_code_review_comments": [
+    "operations.py:96 — load() mapea legacy gas_m3_accum → chips_kg_accum por compat. Bien, pero comment del bloque 99-104 menciona migración de m3_gas_ars pero no hace nada (pass). Limpiar.",
+    "operations.py:150 — fórmula chips_rate hace `BASE_CHIP_CALORIFIC_MJ_KG / cal` para reescalar consumo según PCI: si PCI sube de 17 a 19, consume MENOS chips (correcto físicamente: más energía por kg → menos kg). Bien.",
+    "operations.py:274 — update_prices clamps PCI entre 5 y 25 MJ/kg silenciosamente (sin error). Documentar este clamp en el frontend o devolver el valor efectivamente persistido (el backend ya retorna ops_service.prices, no incluye chip_calorific_mj_kg en la respuesta de POST /energy/prices — confunde al cliente). Recomendación: incluir chip_calorific_mj_kg en el dict devuelto por POST /energy/prices.",
+    "server.py:776 — POST /maintenance/thresholds retorna ops_service.thresholds (todo el dict). Bien para UI.",
+    "server.py:732-751 — /api/energy retorna 13 campos. Endpoint pesado pero coherente. OK.",
+    "reports.py:156 — string 'Chips de madera' hardcoded; si en el futuro se permite renombrar el combustible por planta, parametrizar."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iter6_chips.py (nuevo, 8 tests)",
+    "/app/backend/tests/test_fase3_ops.py (1 línea: actualizar legacy 'gas_m3' → 'chips_kg' en test_energy_shape)"
+  ],
+  "success_rate": {"backend": "100% (8/8 nuevos iter6 + 22/22 FASE3 regression, 1 skip aceptable)", "frontend": "100% (UI loads, PCI edit y shifts edit persisten via backend API, maint-thresholds card presente y editable)"},
+  "test_credentials": "admin/admin, operario/operario, recovery: yerbatera-recovery-2026 (sin cambios)",
+  "seed_data_creation": "Cambios temporales de PCI (17→19→17), turnos (3×8→2×6→3×8) y umbral tambor_zapecado.lubricacion (500→650→500). Todos restaurados al final.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Iteration 6 validó migración completa gas→chips de madera + editables (PCI, turnos, umbrales mant). Para regresión: `REACT_APP_BACKEND_URL=<url> pytest backend/tests/test_iter6_chips.py backend/tests/test_fase3_ops.py -v`. Testids confirmados nuevos: energy-chips (NO energy-gas), energy-shifts, shifts-edit/save/cancel, shifts-per-day, hours-per-shift, price-calorific, maint-thresholds, maint-thr-edit/save/cancel, thr-{component}-{action}. IMPORTANTE: en OperacionesView, NumberInput a veces pone data-testid en el <input> (price-*, shifts-per-day, hours-per-shift), a veces parece estar en el wrapper (thr-*) — usar `input[data-testid=X]` primero, luego fallback al wrapper con `.locator('input').first`.",
+  "rca of the issue": "Bug original (previo a iter6): /api/energy crashea con 500 porque energy_cost_ars() referenciaba self.gas_m3_accum y self.prices['m3_gas_ars'] (removed). FIX confirmado: operations.py:174 ahora `return self.total_kwh() * self.prices['kwh_ars'] + self.chips_kg_accum * self.prices['kg_chips_ars']`. Validado: test_energy_returns_chips_not_gas → 200 + energy_cost_ars numérico. PDF mensual con 'Chips de madera' validado descomprimiendo el stream con pypdf (los bytes raw están FlateDecode-comprimidos, por eso una búsqueda binaria simple no lo encuentra; usar text extraction)."
+}

@@ -654,6 +654,7 @@ class PricesBody(BaseModel):
     kwh_ars: Optional[float] = None
     kg_chips_ars: Optional[float] = None
     kg_yerba_venta_ars: Optional[float] = None
+    chip_calorific_mj_kg: Optional[float] = None
 
 
 class ShiftsBody(BaseModel):
@@ -734,6 +735,8 @@ async def get_energy():
         "kwh_by_component": dict(ops_service.kwh_accum),
         "total_kwh": ops_service.total_kwh(),
         "chips_kg": ops_service.chips_kg_accum,
+        "chips_cost_ars": ops_service.chips_kg_accum * ops_service.prices["kg_chips_ars"],
+        "chip_calorific_mj_kg": ops_service.chip_calorific_mj_kg,
         "prices": dict(ops_service.prices),
         "energy_cost_ars": ops_service.energy_cost_ars(),
         "kg_produced": ops_service.kg_produced,

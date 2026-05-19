@@ -84,6 +84,8 @@ export const api = {
   maintAck: (component, action) => http.post('/maintenance/ack', { component, action }).then(r => r.data),
   getEnergy: () => http.get('/energy').then(r => r.data),
   setPrices: (prices) => http.post('/energy/prices', prices).then(r => r.data),
+  setShifts: (body) => http.post('/ops/shifts', body).then(r => r.data),
+  setThresholds: (thresholds) => http.post('/maintenance/thresholds', { thresholds }).then(r => r.data),
   opsReset: (what) => http.post(`/ops/reset?what=${what}`).then(r => r.data),
   reportMonthlyUrl: () => `${API}/reports/monthly`,
   reportBatchUrl: (id) => `${API}/reports/batch/${encodeURIComponent(id)}`,
