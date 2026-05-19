@@ -78,10 +78,8 @@ export function ZapecadoMimic({ data, animated = true }) {
       <rect x="400" y="135" width="60" height="10" fill={C.border} />
       <polygon points="400,130 400,150 460,140" fill={C.border} />
       {/* Lecturas */}
-      <text x="280" y="35" fill={color} fontSize="32" fontFamily="JetBrains Mono" fontWeight="300" textAnchor="middle">
-        {t.toFixed(1)}°
-      </text>
-      <text x="280" y="55" fill={C.text} fontSize="11" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">TEMP HORNO</text>
+      <text x="280" y="35" fill={color} fontSize="32" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${t.toFixed(1)}°C`}</text>
+      <text x="280" y="55" fill={C.text} fontSize="11" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">T HORNO (gases)</text>
       <text x="430" y="180" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">SALIDA</text>
       <text x="430" y="195" fill={alim ? C.ok : C.err} fontSize="11" fontFamily="JetBrains Mono" textAnchor="middle">
         {alim ? 'FEED ON' : 'FEED OFF'}
@@ -133,9 +131,11 @@ export function SecadoMimic({ data, animated = true }) {
         </circle>
       ))}
       {/* Lecturas */}
-      <text x="240" y="200" fill={C.flame} fontSize="22" fontFamily="JetBrains Mono" fontWeight="300" textAnchor="middle">{t.toFixed(1)}°C</text>
-      <text x="240" y="220" fill={C.steam} fontSize="22" fontFamily="JetBrains Mono" fontWeight="300" textAnchor="middle">{h.toFixed(1)}%</text>
-      <text x="40" y="170" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">{vAire.toFixed(1)} m/s</text>
+      <text x="180" y="200" fill={C.flame} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${t.toFixed(1)}°C`}</text>
+      <text x="180" y="215" fill={C.text} fontSize="8" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.55">T REAL</text>
+      <text x="300" y="200" fill={C.steam} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${h.toFixed(1)}%`}</text>
+      <text x="300" y="215" fill={C.text} fontSize="8" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.55">HR REAL</text>
+      <text x="40" y="170" fill={C.text} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.7">{`${vAire.toFixed(1)} m/s`}</text>
     </svg>
   );
 }
@@ -168,10 +168,10 @@ export function CanchadoMimic({ data, animated = true }) {
       ))}
       {/* Salida */}
       <rect x="200" y="200" width="80" height="20" fill={C.border} />
-      <text x="240" y="35" fill="#D8B4FE" fontSize="22" fontFamily="JetBrains Mono" fontWeight="300" textAnchor="middle">{rpm.toFixed(0)} rpm</text>
+      <text x="240" y="35" fill="#D8B4FE" fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${rpm.toFixed(0)} rpm`}</text>
       <text x="240" y="55" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">VEL. MOLINO</text>
-      <text x="380" y="130" fill={C.amber} fontSize="20" fontFamily="JetBrains Mono" fontWeight="300" textAnchor="middle">{p.toFixed(2)}</text>
-      <text x="380" y="148" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">mm</text>
+      <text x="390" y="130" fill={C.amber} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${p.toFixed(2)} mm`}</text>
+      <text x="390" y="148" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">PARTÍCULA</text>
     </svg>
   );
 }
@@ -280,8 +280,8 @@ export function ZapecadoPid({ data }) {
       <text x="260" y="40" fill={c} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle">101</text>
       <line x1="260" y1="52" x2="260" y2="60" stroke={c} strokeDasharray="2 2" />
       {/* Valor TI */}
-      <text x="260" y="115" fill={c} fontSize="28" fontFamily="JetBrains Mono" fontWeight="300" textAnchor="middle">{t.toFixed(1)}</text>
-      <text x="260" y="132" fill={C.text} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">°C</text>
+      <text x="260" y="115" fill={c} fontSize="28" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${t.toFixed(1)}°C`}</text>
+      <text x="260" y="132" fill={C.text} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.6">TIC-101 · GASES</text>
       {/* Quemador */}
       <polygon points="240,140 280,140 270,180 250,180" fill="none" stroke={C.flame} strokeWidth="1.5" />
       <text x="260" y="195" fill={C.flame} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle">BURNER</text>
@@ -316,8 +316,10 @@ export function SecadoPid({ data }) {
       <text x="300" y="44" fill={C.steam} fontSize="10" fontFamily="JetBrains Mono" textAnchor="middle">MI-201</text>
       <line x1="300" y1="60" x2="300" y2="80" stroke={C.steam} strokeDasharray="2 2" />
       {/* values */}
-      <text x="180" y="170" fill={C.flame} fontSize="22" fontFamily="JetBrains Mono" textAnchor="middle">{t.toFixed(1)}°C</text>
-      <text x="300" y="170" fill={C.steam} fontSize="22" fontFamily="JetBrains Mono" textAnchor="middle">{h.toFixed(1)}%</text>
+      <text x="180" y="170" fill={C.flame} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${t.toFixed(1)}°C`}</text>
+      <text x="180" y="185" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.55">TI-201 · ZONA</text>
+      <text x="300" y="170" fill={C.steam} fontSize="22" fontFamily="JetBrains Mono" fontWeight="500" textAnchor="middle">{`${h.toFixed(1)}%`}</text>
+      <text x="300" y="185" fill={C.text} fontSize="9" fontFamily="JetBrains Mono" textAnchor="middle" opacity="0.55">MI-201 · NIR HR</text>
     </svg>
   );
 }
@@ -338,8 +340,8 @@ export function CanchadoPid({ data }) {
       {/* outlet */}
       <line x1="320" y1="120" x2="440" y2="120" stroke={C.text} strokeWidth="1.5" />
       <polygon points="430,115 440,120 430,125" fill={C.text} />
-      <text x="100" y="190" fill="#D8B4FE" fontSize="18" fontFamily="JetBrains Mono">{rpm.toFixed(0)} rpm</text>
-      <text x="280" y="190" fill={C.amber} fontSize="18" fontFamily="JetBrains Mono">{p.toFixed(2)} mm</text>
+      <text x="100" y="190" fill="#D8B4FE" fontSize="20" fontFamily="JetBrains Mono" fontWeight="500">{`${rpm.toFixed(0)} rpm`}</text>
+      <text x="280" y="190" fill={C.amber} fontSize="20" fontFamily="JetBrains Mono" fontWeight="500">{`${p.toFixed(2)} mm`}</text>
     </svg>
   );
 }

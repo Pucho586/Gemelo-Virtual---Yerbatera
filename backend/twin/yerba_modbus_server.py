@@ -62,6 +62,13 @@ class YerbaModbusServer:
                 hr=ModbusSequentialDataBlock(0, [0] * 16),
                 ir=ModbusSequentialDataBlock(0, [0] * 16),
             )
+        # Unit 100: globales (aceleración, throughput)
+        contexts[100] = _CTX_CLS(
+            di=ModbusSequentialDataBlock(0, [0] * 4),
+            co=ModbusSequentialDataBlock(0, [0] * 4),
+            hr=ModbusSequentialDataBlock(0, [0] * 8),
+            ir=ModbusSequentialDataBlock(0, [0] * 8),
+        )
 
         # Construir ModbusServerContext usando el nombre de parámetro correcto
         kwargs = {"single": False, _SERVER_CTX_PARAM: contexts}
@@ -77,9 +84,31 @@ class YerbaModbusServer:
 
     def _update_registers(self):
         """
-        Escribe en Holding Registers (func_code=3) de cada unidad.
-        Los *int()* son simples escalados para enteros.
-        Ajusta índices y longitudes según tu simulador real.
+        Escribe en Holding Registers (func_code=3) y Coils (func_code=1) de cada unidad.
+        Convención de escalado: enteros = valor*10 (excepto carga/co2 sin decimales).
+
+        Unit 0 Zapecado HR:
+          [0] T actual×10 · [1] vel.tambor · [2] vel.chip · [3] alim
+          [4] T_SP×10 (efectivo) · [5] T_obj manual×10 (0=auto) · [6] tau×10
+        Unit 0 Coils: [0] falla_quemador · [1] falla_motor_tambor
+
+        Unit 1 Secado HR:
+          [0] T×10 · [1] H×10 · [2] vel.aire×10 · [3] estado
+          [4] T_obj×10 · [5] H_obj×10 · [6] tau_t×10
+        Unit 1 Coils: [0] falla_ventilador · [1] falla_serpentin
+
+        Unit 2 Canchado HR:
+          [0] vel.molino×10 · [1] particula×100 · [2] estado
+          [3] particula_obj×100 · [4] particula_sp_efectivo×100 · [5] tau_p×10
+        Unit 2 Coils: [0] falla_motor · [1] rodamiento_caliente
+
+        Unit 3..14 Cámaras HR:
+          [0] T×10 · [1] H×10 · [2] CO2 · [3] T_obj×10 · [4] H_obj×10 · [5] CO2_obj
+          [6] carga · [7] dias×100 · [8] vent · [9] vapor_on · [10] vapor_kgh×10
+          [11] vapor_T_sp×10 · [12] vapor_H_sp×10 · [13] tau
+        Unit 3..14 Coils: [0] falla_ventilador · [1] fuga_vapor · [2] puerta_abierta
+
+        Unit 100 HR (simulación global): [0] aceleracion×10 · [1] throughput_kgh
         """
         # Unidad 0: Zapecado
         try:
@@ -89,6 +118,12 @@ class YerbaModbusServer:
                 int(zap.velocidad_tambor),
                 int(zap.velocidad_chip),
                 int(getattr(zap, "estado_alimentacion", 0)),
+                int(zap.get_setpoint() * 10),
+                int((zap.temperatura_obj or 0) * 10),
+                int(zap.tau * 10),
+            ])
+            self.context[0].setValues(1, 0, [
+                int(zap.falla_quemador), int(zap.falla_motor_tambor),
             ])
         except Exception:
             pass
@@ -101,6 +136,12 @@ class YerbaModbusServer:
                 int(sec.humedad * 10),
                 int(sec.velocidad_aire * 10),
                 int(getattr(sec, "estado", 0)),
+                int(sec.temperatura_obj * 10),
+                int(sec.humedad_obj * 10),
+                int(sec.tau_t * 10),
+            ])
+            self.context[1].setValues(1, 0, [
+                int(sec.falla_ventilador), int(sec.falla_serpentin),
             ])
         except Exception:
             pass
@@ -110,8 +151,14 @@ class YerbaModbusServer:
             can = self.simulador.canchado
             self.context[2].setValues(3, 0, [
                 int(can.velocidad_molino * 10),
-                int(can.tamano_particula * 10),
+                int(can.tamano_particula * 100),
                 int(getattr(can, "estado", 0)),
+                int((can.tamano_particula_obj or 0) * 100),
+                int(can.get_setpoint() * 100),
+                int(can.tau_p * 10),
+            ])
+            self.context[2].setValues(1, 0, [
+                int(can.falla_motor), int(can.rodamiento_caliente),
             ])
         except Exception:
             pass
@@ -135,9 +182,23 @@ class YerbaModbusServer:
                         int(getattr(cam, "vapor_caudal_kgh", 0) * 10),
                         int(getattr(cam, "vapor_setpoint_temp", 0) * 10),
                         int(getattr(cam, "vapor_setpoint_hum", 0) * 10),
+                        int(getattr(cam, "tau", 600)),
+                    ])
+                    self.context[i + 3].setValues(1, 0, [
+                        int(cam.falla_ventilador), int(cam.fuga_vapor), int(cam.puerta_abierta),
                     ])
                 else:
-                    self.context[i + 3].setValues(3, 0, [0] * 13)
+                    self.context[i + 3].setValues(3, 0, [0] * 14)
+                    self.context[i + 3].setValues(1, 0, [0, 0, 0])
+        except Exception:
+            pass
+
+        # Unidad 100: Globales de simulación (acel + throughput)
+        try:
+            self.context[100].setValues(3, 0, [
+                int(self.simulador.aceleracion * 10),
+                int(self.simulador.throughput_kgh),
+            ])
         except Exception:
             pass
 

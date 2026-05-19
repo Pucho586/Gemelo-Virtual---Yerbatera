@@ -179,8 +179,8 @@ Aceleración (`config.simulacion.aceleracion`): 1 = real-time, 60 = 1 min real p
 
 | Protocolo | Puerto | Detalles |
 |-----------|-------:|----------|
-| Modbus TCP | 5020 | 7 unit IDs (zapecado=0, secado=1, canchado=2, cam0-3=3-6). Registers holding (R/W) y input (RO). |
-| OPC UA | 4840 | Namespace `YerbaProcess`. Variables organizadas por jerarquía de objetos: `/Plant/Zapecado/Temperature`, etc. |
+| Modbus TCP | 5020 | Unit IDs: zapecado=0, secado=1, canchado=2, cámaras=3..14, globales=100. Registers holding (R/W) + coils (fallas). |
+| OPC UA | 4840 | Namespace `YerbaProcess`. Objetos: `Zapecado`, `Secado`, `Canchado`, `Camara1..12`, `Simulacion`. |
 | MQTT | broker externo | Topics `yerba/{etapa}` con payload JSON. Publica cada N s (default 5). |
 
 **Clientes (IN)** — leen del PLC real cuando el modo es `shadow` o `twin`:
@@ -188,6 +188,98 @@ Aceleración (`config.simulacion.aceleracion`): 1 = real-time, 60 = 1 min real p
 - Mismo set de protocolos.
 - Mapeo configurable de tag → variable interna desde la UI (Industria 4.0).
 - Polling interval por protocolo.
+
+#### Mapeo Modbus completo (función 3 = Holding Registers, función 1 = Coils)
+
+**Unidad 0 — Zapecado**
+| Reg | Variable | Escala |
+|----:|----------|--------|
+| 0 | T actual | ×10 |
+| 1 | velocidad_tambor | rpm |
+| 2 | velocidad_chip | kg/h |
+| 3 | estado_alimentacion | 0/1 |
+| 4 | T setpoint efectivo | ×10 |
+| 5 | T setpoint manual (0=auto) | ×10 |
+| 6 | τ térmica | ×10 |
+
+| Coil | Variable |
+|----:|----------|
+| 0 | falla_quemador |
+| 1 | falla_motor_tambor |
+
+**Unidad 1 — Secado**
+| Reg | Variable | Escala |
+|----:|----------|--------|
+| 0 | T actual | ×10 |
+| 1 | HR actual | ×10 |
+| 2 | velocidad_aire | ×10 |
+| 3 | estado | 0/1 |
+| 4 | T setpoint | ×10 |
+| 5 | HR setpoint | ×10 |
+| 6 | τ térmica | ×10 |
+
+| Coil | Variable |
+|----:|----------|
+| 0 | falla_ventilador |
+| 1 | falla_serpentin |
+
+**Unidad 2 — Canchado**
+| Reg | Variable | Escala |
+|----:|----------|--------|
+| 0 | velocidad_molino | ×10 |
+| 1 | tamano_particula | ×100 |
+| 2 | estado | 0/1 |
+| 3 | particula setpoint manual (0=auto) | ×100 |
+| 4 | particula setpoint efectivo | ×100 |
+| 5 | τ molino | ×10 |
+
+| Coil | Variable |
+|----:|----------|
+| 0 | falla_motor |
+| 1 | rodamiento_caliente |
+
+**Unidades 3..14 — Cámaras (hasta 12)**
+| Reg | Variable | Escala |
+|----:|----------|--------|
+| 0 | T actual | ×10 |
+| 1 | HR actual | ×10 |
+| 2 | CO₂ | ppm |
+| 3 | T setpoint | ×10 |
+| 4 | HR setpoint | ×10 |
+| 5 | CO₂ setpoint | ppm |
+| 6 | carga | kg |
+| 7 | días maduración | ×100 |
+| 8 | ventilador | 0/1 |
+| 9 | vapor_activo | 0/1 |
+| 10 | vapor_caudal | ×10 |
+| 11 | vapor SP T | ×10 |
+| 12 | vapor SP HR | ×10 |
+| 13 | τ cámara | s |
+
+| Coil | Variable |
+|----:|----------|
+| 0 | falla_ventilador |
+| 1 | fuga_vapor |
+| 2 | puerta_abierta |
+
+**Unidad 100 — Globales de simulación**
+| Reg | Variable | Escala |
+|----:|----------|--------|
+| 0 | aceleracion (factor compresión tiempo) | ×10 |
+| 1 | throughput_kgh | kg/h |
+
+#### OPC UA — nodos disponibles
+
+Bajo `Objects/YerbaProcess`:
+
+- `Zapecado`: `Temperatura`, `TemperaturaObjetivo`, `Tau`, `FallaQuemador`, `FallaMotorTambor`
+- `Secado`: `Temperatura`, `Humedad`, `TemperaturaObjetivo`, `HumedadObjetivo`, `TauTermico`, `FallaVentilador`, `FallaSerpentin`
+- `Canchado`: `VelocidadMolino`, `TamanoParticula`, `TamanoParticulaObjetivo`, `TauMolino`, `FallaMotor`, `RodamientoCaliente`
+- `Camara1..12`: `Temperatura`, `Humedad`, `CO2`, `DiasMaduracion`, `TemperaturaObjetivo`, `HumedadObjetivo`, `VaporActivo`, `VaporCaudalKgh`, `VaporSetpointTemp`, `VaporSetpointHum`, `VaporKgAcum`, `Tau`, `FallaVentilador`, `FugaVapor`, `PuertaAbierta`, `Activa`
+- `Simulacion`: `Aceleracion`, `ThroughputKgh`, `Modo`
+- `WhatIf/{scenario_id}`: KPIs de cada escenario (ver §3.10)
+
+Todas las variables están marcadas como writable (`set_writable()`) para que un cliente OPC UA externo pueda escribir sobre ellas — el simulador lo respetará si el modo es `twin`.
 
 ### 3.5 Alarmas ISA-18.2 (`alarms.py`)
 
@@ -417,10 +509,71 @@ mass_flow.snapshot()               # estado completo + últimos 50 eventos del l
 - `WS /ws` → broadcast a 1 Hz del state
 
 ### 5.3 Controles por etapa
-- `POST /zapecado` `{setpoint?, alimentacion?}`
-- `POST /secado` `{...}`
-- `POST /canchado` `{...}`
-- `POST /camaras/{idx}` `{ventilador?, temp_target?}`
+
+Todos aceptan campos opcionales (envían sólo los que cambian). **Cualquiera de estos
+valores también se refleja en Modbus y OPC UA** (ver §3.4).
+
+#### `POST /zapecado`
+```json
+{
+  "velocidad_tambor": 15,        // rpm
+  "velocidad_chip": 30,          // kg/h
+  "estado_alimentacion": true,
+  "temperatura_obj": 480,        // SP manual °C. Mandar null para volver a SP dinámico
+  "tau": 90,                     // constante de tiempo térmica (s sim)
+  "falla_quemador": false,       // INYECCIÓN DE FALLA: quemador no calienta
+  "falla_motor_tambor": false    // INYECCIÓN DE FALLA: tambor parado
+}
+```
+
+#### `POST /secado`
+```json
+{
+  "velocidad_aire": 2.5,         // m/s
+  "estado": true,
+  "temperatura_obj": 95,         // SP °C (típico 90-100)
+  "humedad_obj": 7,              // SP HR final %  (piso al que se llega)
+  "tau_t": 120,                  // constante de tiempo térmica (s sim)
+  "falla_ventilador": false,     // FALLA: sin circulación de aire
+  "falla_serpentin": false       // FALLA: calefactor caído
+}
+```
+
+#### `POST /canchado`
+```json
+{
+  "velocidad_molino": 60,
+  "estado": true,
+  "tamano_particula_obj": 4.5,   // SP grosor mm. null para SP dinámico (10 − 0.07·rpm)
+  "tau_p": 5,                    // constante de tiempo molino (s sim)
+  "falla_motor": false,          // FALLA: molino parado, encoder=0
+  "rodamiento_caliente": false   // FALLA: T_rodamientos +35°C y vibX +4 mm/s
+}
+```
+
+#### `POST /camaras/{idx}`
+```json
+{
+  "carga_kg": 1200,
+  "ventilador": true,
+  "temperatura_obj": 35,         // SP T °C
+  "humedad_obj": 75,             // SP HR %
+  "co2_obj": 3000,
+  "vapor_activo": false,         // inyección por techo ON/OFF
+  "vapor_caudal_kgh": 20,
+  "vapor_setpoint_temp": 40,
+  "vapor_setpoint_hum": 85,
+  "tau": 600,                    // constante de tiempo cámara (s sim)
+  "falla_ventilador": false,     // FALLA: sin circulación → CO2 sube
+  "fuga_vapor": false,           // FALLA: se consume vapor sin efecto útil
+  "puerta_abierta": false        // FALLA: pérdida acelerada hacia ambiente
+}
+```
+
+#### Configuración global de simulación
+- `POST /config` `{simulacion: {aceleracion: N}}` — N ∈ {1, 60, 3600, 86400} típico
+  (1× real, 1 min/s, 1 h/s, 1 día/s). También se puede setear desde el control de
+  velocidad del header (admin).
 
 ### 5.4 Recetas
 - `GET /recipes`

@@ -20,6 +20,7 @@ import Fase4View from './components/Fase4View';
 import MassFlowView from './components/MassFlowView';
 import DocsModal from './components/DocsModal';
 import TourModal from './components/TourModal';
+import SpeedControl from './components/SpeedControl';
 import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen, GraduationCap } from '@phosphor-icons/react';
 
 const TABS = [
@@ -141,6 +142,7 @@ function AuthedApp() {
             <button onClick={toggleMimic} className="text-xs font-mono text-slate-400 hover:text-amber-300 transition-colors border border-[#232A26] px-2 py-1" data-testid="mimic-toggle" title="Estilo de mímicos">
               {mimicStyle === 'svg' ? 'SVG' : 'P&ID'}
             </button>
+            <SpeedControl />
             <button onClick={() => setTourOpen(true)} className="inline-flex items-center gap-1 text-xs font-mono text-amber-300 hover:text-amber-200 transition-colors border border-amber-500/40 px-2 py-1" data-testid="tour-open-btn" title="Tour guiado de primer turno">
               <GraduationCap size={12} /> Tour
             </button>

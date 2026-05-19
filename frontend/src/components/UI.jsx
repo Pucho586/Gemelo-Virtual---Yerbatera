@@ -115,7 +115,7 @@ export function Slider({ value, onChange, min = 0, max = 100, step = 1, label, u
   );
 }
 
-export function NumberInput({ value, onChange, min, max, step = 1, label, unit, testid, className = '' }) {
+export function NumberInput({ value, onChange, min, max, step = 1, label, unit, hint, testid, className = '' }) {
   return (
     <label className={`flex flex-col gap-1 ${className}`}>
       {label && <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">{label}{unit && <span className="text-slate-600 ml-1">({unit})</span>}</span>}
@@ -129,6 +129,7 @@ export function NumberInput({ value, onChange, min, max, step = 1, label, unit, 
         onChange={(e) => onChange(e.target.value === '' ? '' : parseFloat(e.target.value))}
         className="field"
       />
+      {hint && <span className="text-[10px] text-slate-500 mt-0.5 leading-tight">{hint}</span>}
     </label>
   );
 }

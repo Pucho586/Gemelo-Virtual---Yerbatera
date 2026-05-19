@@ -60,11 +60,38 @@ Vista resumen con:
 
 Vista animada del flujo de masa. Cada etapa muestra:
 - Estado de alimentación (ON/OFF en color)
-- Temperatura/humedad medidas
-- Setpoints aplicados
+- **T REAL y SP EFECTIVO** lado a lado para ver al instante cuán lejos está el proceso del objetivo
 - Animación de partículas representando el flujo de yerba
 
 Alternar entre SVG animado y P&ID estático con el botón del header.
+
+### 3.2.5 Setpoints, τ (constante de tiempo) e inyección de fallas
+
+En cada vista de etapa (Zapecado / Secado / Canchado / Cámaras) tenés:
+
+1. **SP (setpoint)** — el valor *objetivo*. Cambiarlo NO modifica el valor real al instante: el sistema converge gradualmente.
+   - **Zapecado / Canchado**: dejá el SP vacío para usar el SP dinámico (calculado a partir de vel. chips / rpm). Poné un número para fijarlo manualmente.
+   - **Secado**: tiene SP Temp y SP HR (piso de humedad final).
+   - **Cámara**: SP Temp, SP HR y SP CO₂ por cámara.
+
+2. **τ (tau)** — *constante de tiempo*: cuánto tarda en converger al SP, expresado en segundos de simulación.
+   - τ = 90 s → el valor se acerca al SP en ~3 minutos sim.
+   - τ = 600 s → conversión lenta (~30 min sim).
+   - Combinado con el control de velocidad del header, podés ver maduraciones de 24 meses en 5 minutos reales.
+
+3. **Velocidad de simulación** (control del header, ícono ⏱) — *compresión de tiempo*:
+   - `1×`: tiempo real (1 s real = 1 s simulado)
+   - `60×`: 1 minuto sim por segundo real (ideal para ver secado en 5 min)
+   - `1h/s`: 1 hora sim por segundo real (cámaras en pocos minutos)
+   - `1d/s`: 1 día sim por segundo real (maduración meses → segundos)
+
+4. **Inyección de fallas** (panel al pie de cada vista) — toggles para simular condiciones anormales:
+   - **Zapecado**: `falla quemador` (T cae al ambiente), `falla motor tambor`.
+   - **Secado**: `falla ventilador` (HR no baja), `falla serpentín` (no calienta).
+   - **Canchado**: `falla motor` (encoder 0 rpm), `rodamiento caliente` (alarma típica).
+   - **Cámaras**: `falla ventilador`, `fuga de vapor`, `puerta/techo abierta`.
+
+   Todas las fallas se reflejan en los sensores derivados, alarmas, y están **expuestas a Modbus (coils) y OPC UA (booleanos writable)**.
 
 ### 3.3 Recetas
 

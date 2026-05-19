@@ -133,16 +133,29 @@ class ZapecadoPatch(BaseModel):
     velocidad_tambor: Optional[float] = None
     velocidad_chip: Optional[float] = None
     estado_alimentacion: Optional[bool] = None
+    temperatura_obj: Optional[float] = None   # SP manual; None/0 = SP dinámico
+    tau: Optional[float] = None                # constante de tiempo (s)
+    falla_quemador: Optional[bool] = None
+    falla_motor_tambor: Optional[bool] = None
 
 
 class SecadoPatch(BaseModel):
     velocidad_aire: Optional[float] = None
     estado: Optional[bool] = None
+    temperatura_obj: Optional[float] = None
+    humedad_obj: Optional[float] = None
+    tau_t: Optional[float] = None
+    falla_ventilador: Optional[bool] = None
+    falla_serpentin: Optional[bool] = None
 
 
 class CanchadoPatch(BaseModel):
     velocidad_molino: Optional[float] = None
     estado: Optional[bool] = None
+    tamano_particula_obj: Optional[float] = None  # SP grosor canchada en mm
+    tau_p: Optional[float] = None
+    falla_motor: Optional[bool] = None
+    rodamiento_caliente: Optional[bool] = None
 
 
 class CamaraPatch(BaseModel):
@@ -155,6 +168,10 @@ class CamaraPatch(BaseModel):
     vapor_caudal_kgh: Optional[float] = None
     vapor_setpoint_temp: Optional[float] = None
     vapor_setpoint_hum: Optional[float] = None
+    tau: Optional[float] = None
+    falla_ventilador: Optional[bool] = None
+    fuga_vapor: Optional[bool] = None
+    puerta_abierta: Optional[bool] = None
 
 
 class CamarasCountBody(BaseModel):

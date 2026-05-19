@@ -37,76 +37,120 @@ CO2_RATE = 0.03
 
 # ---------------- Subsistemas ----------------
 class Zapecado:
-    """Etapa de zapecado (golpe térmico breve)."""
+    """Etapa de zapecado (golpe térmico breve).
+
+    Soporta:
+    - `temperatura_obj`: SP manual (si es None usa SP dinámico vel.chips)
+    - `tau`: constante de tiempo (s) - usuario puede acelerar/lentar respuesta
+    - Fallas: `falla_quemador`, `falla_motor_tambor`
+    """
 
     def __init__(self, config: Dict):
         self.temperatura = float(config.get("temperatura_inicial", 450))
         self.velocidad_tambor = float(config.get("velocidad_tambor", 15))
         self.velocidad_chip = float(config.get("velocidad_chip", 30))
         self.estado_alimentacion = True
-        self.tau = 90.0  # respuesta térmica zapecado (s)
+        self.tau = float(config.get("tau", 90.0))  # respuesta térmica zapecado (s)
+        # SP manual (None = SP dinámico calculado a partir de vel.chips)
+        self.temperatura_obj: float | None = config.get("temperatura_objetivo")
+        if self.temperatura_obj is not None:
+            self.temperatura_obj = float(self.temperatura_obj)
+        # Fallas
+        self.falla_quemador = False     # quemador no calienta (target = ambient)
+        self.falla_motor_tambor = False  # tambor parado (no avance, baja temp salida)
+
+    def get_setpoint(self) -> float:
+        if self.temperatura_obj is not None:
+            return float(self.temperatura_obj)
+        return max(350.0, min(600.0, 400.0 + min(self.velocidad_chip, 200) * 1.0))
 
     def update(self, dt: float, ambient_temp: float):
-        # Setpoint dinámico: base 400°C + aporte por carga de chips, max 600°C.
-        # Sin alimentación, el horno se enfría hacia el ambiente real.
-        if self.estado_alimentacion:
-            target = 400.0 + min(self.velocidad_chip, 200) * 1.0  # 400-600°C
-            target = max(350.0, min(600.0, target))
-        else:
+        if self.falla_quemador or not self.estado_alimentacion:
             target = ambient_temp
+        else:
+            target = self.get_setpoint()
         self.temperatura += (target - self.temperatura) / self.tau * dt
         self.temperatura += random.uniform(-0.4, 0.4)
         self.temperatura = max(ambient_temp - 5, min(620.0, self.temperatura))
 
 
 class Secado:
-    """Etapa de secado lento."""
+    """Etapa de secado lento.
+
+    Soporta:
+    - `temperatura_obj`: SP de temperatura (default 95°C)
+    - `humedad_obj`: SP de humedad objetivo final (default ~7%)
+    - `tau_t`: constante de tiempo térmica (s)
+    - Fallas: `falla_ventilador`, `falla_serpentin` (calefactor)
+    """
 
     def __init__(self, config: Dict):
         self.temperatura = float(config.get("temperatura", 90))
         self.humedad = float(config.get("humedad", 30))
         self.velocidad_aire = float(config.get("velocidad_aire", 2.5))
         self.estado = True
-        self.tau_t = 120.0  # respuesta térmica (s)
+        self.tau_t = float(config.get("tau_t", 120.0))  # respuesta térmica (s)
+        self.temperatura_obj = float(config.get("temperatura_objetivo", 95.0))
+        self.humedad_obj = float(config.get("humedad_objetivo", 7.0))
+        self.falla_ventilador = False   # corta circulación de aire (h no baja)
+        self.falla_serpentin = False    # calefactor no calienta
 
     def update(self, dt: float, ambient_temp: float, ambient_humidity: float):
-        # La cámara de secado tiende a su setpoint operativo si está activa,
-        # y al ambiente si no.
-        target_t = 95.0 if self.estado else ambient_temp
+        if self.falla_serpentin or not self.estado:
+            target_t = ambient_temp
+        else:
+            target_t = self.temperatura_obj
         self.temperatura += (target_t - self.temperatura) / self.tau_t * dt
         self.temperatura += random.uniform(-0.2, 0.2)
         self.temperatura = max(ambient_temp - 5, min(120.0, self.temperatura))
 
-        # Humedad: piso dinámico relacionado al ambiente (no puede secar
-        # por debajo de ~ambient/4). Velocidad de aire acelera el descenso.
-        piso = max(5.0, ambient_humidity * 0.25)
-        if self.estado and self.humedad > piso:
-            tasa = 0.0025 * (max(self.velocidad_aire, 0.0) ** 0.5)
+        # Humedad: piso dinámico relacionado al ambiente y al SP del operador.
+        piso = max(self.humedad_obj, ambient_humidity * 0.25)
+        v_efectiva = 0.0 if self.falla_ventilador else max(self.velocidad_aire, 0.0)
+        if self.estado and not self.falla_serpentin and self.humedad > piso:
+            tasa = 0.0025 * (v_efectiva ** 0.5)
             self.humedad -= tasa * dt * (self.humedad - piso)
-        elif not self.estado:
-            # Se equilibra con el ambiente cuando está apagado
+        elif not self.estado or self.falla_serpentin:
+            # Se equilibra con el ambiente cuando está apagado o calefactor caído
             self.humedad += (ambient_humidity - self.humedad) / 600 * dt
         self.humedad += random.uniform(-0.05, 0.05)
         self.humedad = max(3.0, min(95.0, self.humedad))
 
 
 class Canchado:
-    """Etapa de canchado (molienda gruesa)."""
+    """Etapa de canchado (molienda gruesa).
+
+    Soporta:
+    - `tamano_particula_obj`: SP de grosor de canchada (mm). Si es None usa
+      SP dinámico = 10 - 0.07·rpm.
+    - `tau_p`: respuesta del molino (s) - cuánto tarda en converger al SP.
+    - Fallas: `falla_motor`, `rodamiento_caliente`.
+    """
 
     def __init__(self, config: Dict):
         self.velocidad_molino = float(config.get("velocidad_molino", 60))
         self.estado = True
         self.tamano_particula = 10.0  # mm
+        self.tamano_particula_obj: float | None = config.get("tamano_particula_objetivo")
+        if self.tamano_particula_obj is not None:
+            self.tamano_particula_obj = float(self.tamano_particula_obj)
+        self.tau_p = float(config.get("tau_p", 5.0))
+        self.falla_motor = False
+        self.rodamiento_caliente = False  # eleva T rodamientos sin parar
+
+    def get_setpoint(self) -> float:
+        if self.tamano_particula_obj is not None:
+            return float(self.tamano_particula_obj)
+        return max(0.5, 10.0 - self.velocidad_molino * 0.07)
 
     def update(self, dt: float):
-        if self.estado:
-            target = max(0.5, 10.0 - self.velocidad_molino * 0.07)
-            # respuesta rápida
-            self.tamano_particula += (target - self.tamano_particula) / 5.0 * dt
-            self.tamano_particula += random.uniform(-0.08, 0.08)
-        else:
-            # molino parado: la última carga queda igual
+        if self.falla_motor or not self.estado:
+            # Molino parado: la última carga queda igual
             self.tamano_particula += random.uniform(-0.02, 0.02)
+        else:
+            target = self.get_setpoint()
+            self.tamano_particula += (target - self.tamano_particula) / self.tau_p * dt
+            self.tamano_particula += random.uniform(-0.08, 0.08)
         self.tamano_particula = max(0.3, min(15.0, self.tamano_particula))
 
 
@@ -139,18 +183,26 @@ class CamaraMaduracion:
         self.vapor_setpoint_hum: float = float(config.get("vapor_setpoint_hum", self.humedad_obj))
         self.vapor_kg_acum: float = 0.0  # vapor inyectado acumulado (para costos)
 
+        # Fallas
+        self.falla_ventilador = False    # no circula aire (CO2 sube, T no converge)
+        self.fuga_vapor = False           # vapor "se escapa" - se inyecta sin efecto útil
+        self.puerta_abierta = False       # techo/puerta abierta: pérdida hacia ambiente alta
+
         self.lim = limits
-        self.tau = float(limits.get("tau_camera", 600))
+        self.tau = float(config.get("tau", limits.get("tau_camera", 600)))
 
     def update(self, dt: float, ambient_temp: float, ambient_humidity: float):
         # Maduración real solo si hay carga
         if self.carga_kg > 0:
             self.tiempo_maduracion += dt / 86400.0
 
+        # Fallas que alteran el modo
+        vent_efectivo = self.ventilador and not self.falla_ventilador
+        vapor_efectivo = self.vapor_activo and self.vapor_caudal_kgh > 0 and not self.fuga_vapor
+
         # Tres modos: vapor activo / solo ventilador / pasivo
-        if self.vapor_activo and self.vapor_caudal_kgh > 0:
-            # Vapor inyectado: tau más corto y proporcional al caudal (más kg/h → más rápido)
-            # 50 kg/h = factor 1.0 (tau 60 s). 5 kg/h = factor 0.1 (tau 600 s).
+        if vapor_efectivo:
+            # Vapor inyectado: tau más corto y proporcional al caudal
             speed = max(0.05, min(1.0, self.vapor_caudal_kgh / 50.0))
             tau_steam = self.tau * (0.1 + 0.2 * (1.0 - speed))  # 60-180s típicamente
             target_t = self.vapor_setpoint_temp
@@ -159,7 +211,7 @@ class CamaraMaduracion:
             self.humedad += (target_h - self.humedad) / tau_steam * dt
             # Acumular consumo de vapor (kg). dt en segundos sim.
             self.vapor_kg_acum += self.vapor_caudal_kgh * dt / 3600.0
-        elif self.ventilador:
+        elif vent_efectivo:
             # Solo ventilación: tau original hacia setpoint clásico
             target_t = self.temperatura_obj
             target_h = self.humedad_obj
@@ -172,9 +224,19 @@ class CamaraMaduracion:
             self.temperatura += (target_t - self.temperatura) / self.tau * dt
             self.humedad += (target_h - self.humedad) / self.tau * dt
 
+        # Puerta/techo abierta: pérdida acelerada hacia ambiente
+        if self.puerta_abierta:
+            self.temperatura += (ambient_temp - self.temperatura) * 0.02 * dt
+            self.humedad += (ambient_humidity - self.humedad) * 0.02 * dt
+
+        # Fuga de vapor: si está activo el vapor con fuga, igual se consume pero
+        # sólo aporta parcial al ambiente interno
+        if self.vapor_activo and self.fuga_vapor:
+            self.vapor_kg_acum += self.vapor_caudal_kgh * dt / 3600.0 * 0.6
+
         # Producción de CO2 por respiración de la yerba
         self.co2 += CO2_RATE * self.carga_kg * dt
-        if self.ventilador or (self.vapor_activo and self.vapor_caudal_kgh > 0):
+        if vent_efectivo or vapor_efectivo:
             self.co2 -= (self.co2 - self.co2_obj) * 0.15 * dt
         else:
             # se acerca al CO2 ambiente (~420 ppm)
@@ -251,7 +313,9 @@ class YerbaProcessSimulator:
         with self.lock:
             self.throughput_kgh = float(kgh)
 
-    def set_zapecado(self, *, velocidad_tambor=None, velocidad_chip=None, estado_alimentacion=None):
+    def set_zapecado(self, *, velocidad_tambor=None, velocidad_chip=None, estado_alimentacion=None,
+                     temperatura_obj=None, tau=None,
+                     falla_quemador=None, falla_motor_tambor=None):
         with self.lock:
             z = self.zapecado
             if velocidad_tambor is not None:
@@ -260,27 +324,60 @@ class YerbaProcessSimulator:
                 z.velocidad_chip = float(velocidad_chip)
             if estado_alimentacion is not None:
                 z.estado_alimentacion = bool(estado_alimentacion)
+            if temperatura_obj is not None:
+                # None / 0 / cadena vacía => modo SP dinámico
+                z.temperatura_obj = (None if temperatura_obj in ("", None) else float(temperatura_obj))
+            if tau is not None:
+                z.tau = max(5.0, float(tau))
+            if falla_quemador is not None:
+                z.falla_quemador = bool(falla_quemador)
+            if falla_motor_tambor is not None:
+                z.falla_motor_tambor = bool(falla_motor_tambor)
 
-    def set_secado(self, *, velocidad_aire=None, estado=None):
+    def set_secado(self, *, velocidad_aire=None, estado=None,
+                   temperatura_obj=None, humedad_obj=None, tau_t=None,
+                   falla_ventilador=None, falla_serpentin=None):
         with self.lock:
             s = self.secado
             if velocidad_aire is not None:
                 s.velocidad_aire = float(velocidad_aire)
             if estado is not None:
                 s.estado = bool(estado)
+            if temperatura_obj is not None:
+                s.temperatura_obj = float(temperatura_obj)
+            if humedad_obj is not None:
+                s.humedad_obj = float(humedad_obj)
+            if tau_t is not None:
+                s.tau_t = max(5.0, float(tau_t))
+            if falla_ventilador is not None:
+                s.falla_ventilador = bool(falla_ventilador)
+            if falla_serpentin is not None:
+                s.falla_serpentin = bool(falla_serpentin)
 
-    def set_canchado(self, *, velocidad_molino=None, estado=None):
+    def set_canchado(self, *, velocidad_molino=None, estado=None,
+                     tamano_particula_obj=None, tau_p=None,
+                     falla_motor=None, rodamiento_caliente=None):
         with self.lock:
             c = self.canchado
             if velocidad_molino is not None:
                 c.velocidad_molino = float(velocidad_molino)
             if estado is not None:
                 c.estado = bool(estado)
+            if tamano_particula_obj is not None:
+                c.tamano_particula_obj = (None if tamano_particula_obj in ("", None) else float(tamano_particula_obj))
+            if tau_p is not None:
+                c.tau_p = max(0.5, float(tau_p))
+            if falla_motor is not None:
+                c.falla_motor = bool(falla_motor)
+            if rodamiento_caliente is not None:
+                c.rodamiento_caliente = bool(rodamiento_caliente)
 
     def set_camara(self, idx: int, *, carga_kg=None, ventilador=None,
                    temperatura_obj=None, humedad_obj=None, co2_obj=None,
                    vapor_activo=None, vapor_caudal_kgh=None,
-                   vapor_setpoint_temp=None, vapor_setpoint_hum=None):
+                   vapor_setpoint_temp=None, vapor_setpoint_hum=None,
+                   tau=None,
+                   falla_ventilador=None, fuga_vapor=None, puerta_abierta=None):
         with self.lock:
             if idx < 0 or idx >= len(self.camaras):
                 return
@@ -303,6 +400,14 @@ class YerbaProcessSimulator:
                 cam.vapor_setpoint_temp = float(vapor_setpoint_temp)
             if vapor_setpoint_hum is not None:
                 cam.vapor_setpoint_hum = float(vapor_setpoint_hum)
+            if tau is not None:
+                cam.tau = max(10.0, float(tau))
+            if falla_ventilador is not None:
+                cam.falla_ventilador = bool(falla_ventilador)
+            if fuga_vapor is not None:
+                cam.fuga_vapor = bool(fuga_vapor)
+            if puerta_abierta is not None:
+                cam.puerta_abierta = bool(puerta_abierta)
 
     MAX_CAMARAS = 12
 
@@ -432,9 +537,16 @@ class YerbaProcessSimulator:
             },
             "zapecado": {
                 "temperatura": round(z.temperatura, 2),
+                "temperatura_obj": z.temperatura_obj,
+                "temperatura_sp_efectivo": round(z.get_setpoint(), 1),
                 "velocidad_tambor": z.velocidad_tambor,
                 "velocidad_chip": z.velocidad_chip,
                 "estado_alimentacion": z.estado_alimentacion,
+                "tau": z.tau,
+                "faults": {
+                    "falla_quemador": z.falla_quemador,
+                    "falla_motor_tambor": z.falla_motor_tambor,
+                },
                 "sensors": {
                     "t_gases_entrada": round(z.temperatura, 1),         # Termocupla K - tambor
                     "t_yerba_salida": zap_t_yerba,                       # Termocupla K - salida
@@ -444,9 +556,16 @@ class YerbaProcessSimulator:
             },
             "secado": {
                 "temperatura": round(s.temperatura, 2),
+                "temperatura_obj": s.temperatura_obj,
                 "humedad": round(s.humedad, 2),
+                "humedad_obj": s.humedad_obj,
                 "velocidad_aire": s.velocidad_aire,
                 "estado": s.estado,
+                "tau_t": s.tau_t,
+                "faults": {
+                    "falla_ventilador": s.falla_ventilador,
+                    "falla_serpentin": s.falla_serpentin,
+                },
                 "sensors": {
                     "t_aire_entrada": sec_t_aire_in,                     # PT100 / Termocupla K
                     "t_aire_salida": sec_t_aire_out,                     # PT100
@@ -458,13 +577,20 @@ class YerbaProcessSimulator:
             "canchado": {
                 "velocidad_molino": c.velocidad_molino,
                 "tamano_particula": round(c.tamano_particula, 2),
+                "tamano_particula_obj": c.tamano_particula_obj,
+                "tamano_particula_sp_efectivo": round(c.get_setpoint(), 2),
                 "estado": c.estado,
+                "tau_p": c.tau_p,
+                "faults": {
+                    "falla_motor": c.falla_motor,
+                    "rodamiento_caliente": c.rodamiento_caliente,
+                },
                 "sensors": {
-                    "t_rodamientos": can_rod_t,                          # PT100 carcasa
-                    "vibrometro_x": can_vib_x,                           # mm/s RMS eje X
+                    "t_rodamientos": can_rod_t if not c.rodamiento_caliente else round(can_rod_t + 35, 1),
+                    "vibrometro_x": can_vib_x if not c.rodamiento_caliente else round(can_vib_x + 4.0, 2),
                     "vibrometro_y": can_vib_y,                           # eje Y
                     "vibrometro_z": can_vib_z,                           # eje Z
-                    "encoder_rpm": round(c.velocidad_molino, 0),         # encoder rotor
+                    "encoder_rpm": round(c.velocidad_molino, 0) if c.estado and not c.falla_motor else 0,
                     "h_nir_salida": can_h_nir,                           # NIR opcional
                 },
             },
@@ -486,6 +612,12 @@ class YerbaProcessSimulator:
                     "vapor_setpoint_temp": cam.vapor_setpoint_temp,
                     "vapor_setpoint_hum": cam.vapor_setpoint_hum,
                     "vapor_kg_acum": round(cam.vapor_kg_acum, 3),
+                    "tau": cam.tau,
+                    "faults": {
+                        "falla_ventilador": cam.falla_ventilador,
+                        "fuga_vapor": cam.fuga_vapor,
+                        "puerta_abierta": cam.puerta_abierta,
+                    },
                     "sensors": {
                         # PT100 doble: pared y centro de la pila
                         "pt100_pared": round(cam.temperatura + random.uniform(-0.4, 0.4), 2),
