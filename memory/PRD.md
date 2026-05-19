@@ -48,6 +48,18 @@ React (frontend + auth JWT) ─┬─► FastAPI /api/* (REST + WebSocket)
 ### v2.2 — Industria 4.0 (iter 4) — 66/66 tests
 - Clientes Modbus + OPC UA + MQTT subscriber, modo Shadow, drift sim vs PLC, calibración por CSV, audit trail
 
+### v2.4 — FASE 4 + Cámaras configurables + Vapor (iter 7) — 16/16 backend, frontend OK ★
+- **Cámaras configurables** (1-12) desde UI con +/- buttons
+- **Inyección de vapor por cámara**: toggle, caudal (kg/h), setpoints T y HR, acumulador kg
+- **Replay mode**: carga CSV histórico, play/pause/seek, velocidad 0.25×-120×
+- **What-if mode**: hasta 3 escenarios paralelos con overrides JSON, vista comparativa baseline vs variantes con color coding
+- **Exposición SCADA por escenario**:
+  - Modbus TCP unit IDs 20/21/22 (HR registers 0-7 = OEE, $/kg, kWh, chips, T zap, T sec, HR final, prod)
+  - OPC UA `/Plant/WhatIf/scenarioN/{OEE,CostoPorKg,kWhAcum,ChipsKgAcum,...}`
+  - MQTT topics `yerba/whatif/scenarioN/{kpi}`
+- Nuevo tab "Replay & What-if" (Fase4View.jsx)
+- 1 bug fix de route ordering aplicado por testing agent
+
 ### v2.3.1 — Chips de madera + parámetros editables (iter 6) — 8/8 + 22/22 regresión ★
 - Migración completa **gas natural → chips de madera** (combustible para zapecado)
 - Fix crítico: `operations.py::energy_cost_ars()` ya no crashea con AttributeError
@@ -72,10 +84,15 @@ React (frontend + auth JWT) ─┬─► FastAPI /api/* (REST + WebSocket)
 
 ## Backlog próximo
 
-### FASE 4 — Entrenamiento (próxima)
-- [ ] Modo replay de CSV histórico a 10x velocidad
-- [ ] Modo "qué pasaría si" (bifurcar simulación)
-- [ ] Escenarios de fallas predefinidos para entrenar operarios
+### FASE 4 — Entrenamiento (✅ COMPLETADA en iter 7)
+- [x] Modo replay de CSV histórico con velocidad configurable
+- [x] Modo "qué pasaría si" (3 escenarios paralelos)
+- [x] Exposición de escenarios what-if por Modbus/OPC UA/MQTT para SCADA/PLC
+- [ ] Catálogo de escenarios de falla predefinidos (nice-to-have)
+
+### Cámaras y vapor (✅ COMPLETADO en iter 7)
+- [x] Cantidad configurable (1-12)
+- [x] Inyección de vapor por cámara con setpoints
 
 ### Quick wins (P1)
 - [ ] Editor de usuarios desde UI (admin crea/borra/cambia rol)
