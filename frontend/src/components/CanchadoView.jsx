@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Metric, Toggle, Slider } from './UI';
 import { CanchadoChart, flatten } from './Charts';
 import { CanchadoMimic, CanchadoPid } from './Mimics';
+import StageBlock from './StageBlock';
 import { api } from '../lib/api';
 import { Cube } from '@phosphor-icons/react';
 
@@ -62,6 +63,10 @@ export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
         <CardHeader title="Histórico · Tamaño de partícula" subtitle="Target = 10 − 0.07·rpm" />
         <div className="p-2 sm:p-4"><CanchadoChart data={data} /></div>
       </Card>
+
+      <div className="lg:col-span-3">
+        <StageBlock stage="canchado" state={state} />
+      </div>
     </div>
   );
 }

@@ -48,6 +48,16 @@ React (frontend + auth JWT) ─┬─► FastAPI /api/* (REST + WebSocket)
 ### v2.2 — Industria 4.0 (iter 4) — 66/66 tests
 - Clientes Modbus + OPC UA + MQTT subscriber, modo Shadow, drift sim vs PLC, calibración por CSV, audit trail
 
+### v2.6 — Sensores derivados + Mermas editables + Visibilidad cruzada (iter 9) ★
+- **Sensores de campo derivados** en el snapshot del simulator:
+  - Zapecado: termocupla K entrada (T gases), termocupla K salida (T yerba), capacitivo/NIR salida (H), vibrómetro
+  - Secado: PT100 aire entrada/salida, PT100 zona, NIR final, bulbo húmedo extracción
+  - Canchado: PT100 rodamientos, encoder rpm, vibrómetros 3 ejes, NIR opcional salida
+  - Cámaras: PT100 pared, PT100 centro pila, capacitivo HR, NDIR CO₂, T línea vapor, caudalímetro vapor
+- **Visibilidad cruzada**: cada página de etapa muestra `kg_actual`, acumulados, merma y T_in/H_in heredadas del flujo de masa
+- **Mermas editables desde UI**: nuevo editor admin en Flujo de masa (% por etapa, 0-95)
+- Componente reusable `<StageBlock />` + `<ChamberSensorsBlock />`
+
 ### v2.5 — Mass-flow + Snapshot→What-if + rodamientos (iter 8) — 49/49 tests ★
 - **Trazabilidad de masa lote-por-lote**: nuevo servicio `MassFlowService` con 5 etapas (Recepción → Zapecado → Secado → Canchado → Estacionamiento)
 - Cada etapa registra `kg_actual`, `kg_acum_in/out`, `merma_kg`, `T_in/H_in` heredadas de la etapa anterior

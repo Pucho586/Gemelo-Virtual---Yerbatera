@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Metric, Btn, Toggle, Slider, NumberInput } from './UI';
 import { ZapecadoChart, flatten } from './Charts';
 import { ZapecadoMimic, ZapecadoPid } from './Mimics';
+import StageBlock from './StageBlock';
 import { api } from '../lib/api';
 import { Fire, Wind, Thermometer } from '@phosphor-icons/react';
 
@@ -80,6 +81,10 @@ export default function ZapecadoView({ state, series, mimicStyle = 'svg' }) {
           <ZapecadoChart data={data} />
         </div>
       </Card>
+
+      <div className="lg:col-span-3">
+        <StageBlock stage="zapecado" state={state} />
+      </div>
     </div>
   );
 }

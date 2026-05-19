@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Metric, Toggle, Slider } from './UI';
 import { SecadoChart, flatten } from './Charts';
 import { SecadoMimic, SecadoPid } from './Mimics';
+import StageBlock from './StageBlock';
 import { api } from '../lib/api';
 import { Drop, Wind } from '@phosphor-icons/react';
 
@@ -70,6 +71,10 @@ export default function SecadoView({ state, series, mimicStyle = 'svg' }) {
         <CardHeader title="Histórico · Temperatura & humedad" subtitle="Piso dinámico HR = 25% del ambiente" />
         <div className="p-2 sm:p-4"><SecadoChart data={data} /></div>
       </Card>
+
+      <div className="lg:col-span-3">
+        <StageBlock stage="secado" state={state} />
+      </div>
     </div>
   );
 }

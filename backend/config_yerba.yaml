@@ -1,24 +1,24 @@
 camaras:
 - nombre: Camara 1
-  temperatura_objetivo: 35.0
+  temperatura_objetivo: 30.0
   humedad_objetivo: 75.0
-  co2_objetivo: 3000.0
+  co2_objetivo: 2800.0
   vapor_activo: true
   vapor_caudal_kgh: 30.0
   vapor_setpoint_temp: 42.0
   vapor_setpoint_hum: 85.0
 - nombre: Camara 2
-  temperatura_objetivo: 36.0
-  humedad_objetivo: 70.0
-  co2_objetivo: 3200.0
+  temperatura_objetivo: 30.0
+  humedad_objetivo: 75.0
+  co2_objetivo: 2800.0
   vapor_activo: false
   vapor_caudal_kgh: 0.0
   vapor_setpoint_temp: 36.0
   vapor_setpoint_hum: 70.0
 - nombre: Camara 3
-  temperatura_objetivo: 34.0
-  humedad_objetivo: 78.0
-  co2_objetivo: 3100.0
+  temperatura_objetivo: 30.0
+  humedad_objetivo: 75.0
+  co2_objetivo: 2800.0
   vapor_activo: false
   vapor_caudal_kgh: 0.0
   vapor_setpoint_temp: 34.0

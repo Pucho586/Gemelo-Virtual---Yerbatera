@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Metric, Toggle, NumberInput, SectionTitle, Btn } from './UI';
 import { CamarasChart, flatten } from './Charts';
 import { CamaraMimic, CamaraPid } from './Mimics';
+import { ChamberSensorsBlock } from './StageBlock';
 import { api } from '../lib/api';
 import { useAuth, isAdmin } from '../lib/auth';
 import { Cloud, Drop, Thermometer, Fan, Package, Drop as Vapor, Plus, Minus } from '@phosphor-icons/react';
@@ -64,6 +65,12 @@ function ChamberCard({ cam, idx, mimicStyle }) {
         <NumberInput testid={`cam-${idx}-tobj`} label="Obj T" unit="°C" value={tObj} onChange={(v) => { setTObj(v); apply({ temperatura_obj: v }); }} min={20} max={50} step={0.5} />
         <NumberInput testid={`cam-${idx}-hobj`} label="Obj HR" unit="%" value={hObj} onChange={(v) => { setHObj(v); apply({ humedad_obj: v }); }} min={40} max={95} step={1} />
         <NumberInput testid={`cam-${idx}-co2obj`} label="Obj CO₂" unit="ppm" value={co2Obj} onChange={(v) => { setCo2Obj(v); apply({ co2_obj: v }); }} min={400} max={6000} step={50} className="col-span-2" />
+      </div>
+
+      {/* Sensores derivados (PT100 doble + CO2 NDIR + vapor) */}
+      <div className="mt-3 pt-3 border-t" style={{ borderColor: 'var(--border)' }}>
+        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Sensores de campo</span>
+        <ChamberSensorsBlock cam={cam} />
       </div>
 
       {/* Inyección de vapor */}

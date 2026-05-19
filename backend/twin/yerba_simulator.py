@@ -397,6 +397,29 @@ class YerbaProcessSimulator:
         z = self.zapecado
         s = self.secado
         c = self.canchado
+        amb = self.ambient_temp
+        # Vibrómetro: base + ruido + spike si rodamientos cerca del umbral
+        # (no tenemos runtime hours acá - sólo base + ruido pseudo)
+        zap_vib = round(2.5 + random.uniform(-0.3, 0.3) + (0.5 if z.estado_alimentacion else 0.0), 2)
+        can_vib_x = round(1.8 + random.uniform(-0.2, 0.2) + (0.4 if c.estado else 0.0), 2)
+        can_vib_y = round(1.6 + random.uniform(-0.2, 0.2) + (0.3 if c.estado else 0.0), 2)
+        can_vib_z = round(0.9 + random.uniform(-0.1, 0.1), 2)
+        # T rodamientos canchado: ambiente + delta por carga térmica del molino
+        can_rod_t = round(amb + 22 + (c.velocidad_molino - 1500) * 0.008 +
+                          random.uniform(-1.5, 1.5), 1) if c.estado else round(amb + 5, 1)
+        # T salida yerba en zapecado: típicamente 1/3 de la T de gases (110-130°C)
+        zap_t_yerba = round(amb + (z.temperatura - amb) * 0.32 + random.uniform(-2, 2), 1)
+        # H salida zapecado (capacitivo / NIR): la del flujo
+        zap_h_out_nir = round(self.flujo.get("zap_out_humedad", 25.0) + random.uniform(-0.8, 0.8), 2)
+        # H NIR opcional en canchado (debe coincidir con secado)
+        can_h_nir = round(s.humedad + random.uniform(-0.3, 0.3), 2)
+        # Higrómetro bulbo húmedo: aire de extracción del secadero (T_húmedo)
+        # Para aire saliendo del secadero: HR aire ~ 60-80% (saturado por evaporación)
+        sec_t_aire_out = round(s.temperatura - 25 + random.uniform(-2, 2), 1)
+        sec_hr_aire_extr = round(min(90, 60 + (z.temperatura - 200) * 0.08), 1)
+        # T aire entrada secadero (setpoint cerca, con variación pequeña)
+        sec_t_aire_in = round(s.temperatura + 8 + random.uniform(-1.5, 1.5), 1)
+
         return {
             "ts": datetime.now(timezone.utc).isoformat(),
             "mode": self.mode,
@@ -412,17 +435,38 @@ class YerbaProcessSimulator:
                 "velocidad_tambor": z.velocidad_tambor,
                 "velocidad_chip": z.velocidad_chip,
                 "estado_alimentacion": z.estado_alimentacion,
+                "sensors": {
+                    "t_gases_entrada": round(z.temperatura, 1),         # Termocupla K - tambor
+                    "t_yerba_salida": zap_t_yerba,                       # Termocupla K - salida
+                    "h_salida_nir": zap_h_out_nir,                       # Sensor capacitivo / NIR
+                    "vibrometro": zap_vib,                               # eje del tambor (mm/s RMS)
+                },
             },
             "secado": {
                 "temperatura": round(s.temperatura, 2),
                 "humedad": round(s.humedad, 2),
                 "velocidad_aire": s.velocidad_aire,
                 "estado": s.estado,
+                "sensors": {
+                    "t_aire_entrada": sec_t_aire_in,                     # PT100 / Termocupla K
+                    "t_aire_salida": sec_t_aire_out,                     # PT100
+                    "t_zona": round(s.temperatura, 1),                   # PT100 zona cintas
+                    "h_final_nir": round(s.humedad, 2),                  # Higrómetro NIR
+                    "h_bulbo_humedo": sec_hr_aire_extr,                  # bulbo húmedo extracción
+                },
             },
             "canchado": {
                 "velocidad_molino": c.velocidad_molino,
                 "tamano_particula": round(c.tamano_particula, 2),
                 "estado": c.estado,
+                "sensors": {
+                    "t_rodamientos": can_rod_t,                          # PT100 carcasa
+                    "vibrometro_x": can_vib_x,                           # mm/s RMS eje X
+                    "vibrometro_y": can_vib_y,                           # eje Y
+                    "vibrometro_z": can_vib_z,                           # eje Z
+                    "encoder_rpm": round(c.velocidad_molino, 0),         # encoder rotor
+                    "h_nir_salida": can_h_nir,                           # NIR opcional
+                },
             },
             "camaras": [
                 {
@@ -442,6 +486,26 @@ class YerbaProcessSimulator:
                     "vapor_setpoint_temp": cam.vapor_setpoint_temp,
                     "vapor_setpoint_hum": cam.vapor_setpoint_hum,
                     "vapor_kg_acum": round(cam.vapor_kg_acum, 3),
+                    "sensors": {
+                        # PT100 doble: pared y centro de la pila
+                        "pt100_pared": round(cam.temperatura + random.uniform(-0.4, 0.4), 2),
+                        "pt100_centro_pila": round(
+                            cam.temperatura + (0.5 + cam.carga_kg / 5000) + random.uniform(-0.3, 0.3), 2),
+                        # Humedad relativa capacitivo
+                        "hr_capacitivo": round(cam.humedad + random.uniform(-0.5, 0.5), 2),
+                        # CO2 NDIR
+                        "co2_ndir": round(cam.co2 + random.uniform(-8, 8), 0),
+                        # Termoresistencia línea de vapor (si hay inyección)
+                        "t_linea_vapor": (
+                            round(120 + cam.vapor_caudal_kgh * 0.15 + random.uniform(-2, 2), 1)
+                            if cam.vapor_activo and cam.vapor_caudal_kgh > 0 else 0.0
+                        ),
+                        # Caudalímetro vapor másico (kg/h)
+                        "caudal_vapor": (
+                            round(cam.vapor_caudal_kgh + random.uniform(-0.4, 0.4), 2)
+                            if cam.vapor_activo else 0.0
+                        ),
+                    },
                 }
                 for cam in self.camaras
             ],
