@@ -1,0 +1,39 @@
+{
+  "summary": "Iteration 3 retest after v2.1 bug fix on /api/state. BACKEND: 48/48 pytest pass (test_auth_recipes_batches.py 28/28 incl. test_state_has_new_fields; test_yerba_api.py 20/20). The previously-failing test_state_has_new_fields now passes - /api/state returns mode, throughput_kgh, and flujo{zap_out_humedad, sec_out_humedad, can_out_kgh} as expected (verified by curl and pytest). FRONTEND: All required new data-testids verified visible and functional on the live preview: apply-suave/fuerte/barbacua/organica (Btn passes testid->data-testid), recipe-applied-msg-suave shows 'Aplicada' after click, b-kg-entrada/b-receta/b-start (batch-new-form), b-kg-salida/b-close (batch-close-form). End-to-end Lotes flow exercised: create lote 1000kg -> Iniciar -> b-close-btn -> b-kg-salida=960 -> b-close -> finished with merma 4% recorded under operario=admin. No regressions in mode/recipes/clima endpoints. Admin login still seeded (admin/admin), operator/operario also OK, recovery code yerbatera-recovery-2026 still works (test_recover_invalid_code returns 401 on wrong code as expected).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/login", "issue": "No brute-force lockout (auth playbook recommends 5 fails -> temp lock). Not enforced. Hardening recommendation only."},
+      {"endpoint": "CORS", "issue": "backend/.env CORS_ORIGINS=\"*\" combined with withCredentials=true is technically invalid per CORS spec. Today bearer-header fallback masks it, but cookie-only browsers may reject. Recommend explicit origin list."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_recipes_batches.py",
+    "/app/backend/tests/test_yerba_api.py",
+    "/app/test_reports/pytest/iteration_3_results.xml"
+  ],
+  "action_items": [
+    "No HIGH or critical action items. The HIGH bug from iteration 2 (state missing mode/throughput_kgh/flujo) is FIXED and verified.",
+    "Optional hardening (low priority): tighten CORS_ORIGINS to explicit origin list, add brute-force lockout to /api/auth/login (5 fails)."
+  ],
+  "critical_code_review_comments": [
+    "_snapshot_locked() now correctly emits mode/throughput_kgh/flujo - matches contract used by frontend mimics.",
+    "test_yerba_api.py client fixture was updated to login as admin first because POST /zapecado, /secado, /canchado, /camaras/{i}, /config and /ai/chat are now auth-protected via current_user_dep/admin_only. Without the Bearer token they returned 401. This is the only test-file edit; production code unchanged.",
+    "Btn UI component correctly forwards testid prop as data-testid (verified - all apply-* selectors work). LotesView/RecetasView testids are now fully usable for automation."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_yerba_api.py (added admin Bearer auth to session-scoped client fixture so previously-public endpoints that are now auth-gated keep passing)"
+  ],
+  "success_rate": {"backend": "100% (48/48)", "frontend": "100% of requested testids verified, full Lotes happy-path executed end-to-end"},
+  "test_credentials": "admin/admin (admin), operario/operario (operator), recovery code: yerbatera-recovery-2026",
+  "seed_data_creation": "Created one extra closed batch via UI flow during testing (1000kg in / 960kg out, 4% merma, operario=admin). One real-data record left in MongoDB - safe regression artifact, not active.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Bug HIGH from iteration 2 is fixed and locked-in by pytest test_state_has_new_fields. All 4 required apply-{id} buttons + recipe-applied-msg-{id} + b-kg-entrada/b-start/b-kg-salida/b-close testids exist and are functionally verified. If running test_yerba_api.py: the session fixture now logs in as admin first (admin/admin must remain seeded). Login testids: login-username, login-password, login-submit, login-error. Lotes: batch-new-btn -> batch-new-form -> b-kg-entrada / b-receta / b-obs / b-start; active: batch-active + b-close-btn -> batch-close-form -> b-kg-salida / b-close-obs / b-close. Recetas: receta-card-{id} + apply-{id} + recipe-applied-msg-{id}.",
+  "rca of the issue": "No outstanding RCA - iteration 2 HIGH bug RCA (mode/throughput_kgh/flujo missing from _snapshot_locked) has been correctly remediated at /app/backend/twin/yerba_simulator.py lines 323-325. Confirmed via both curl on /api/state and dedicated pytest case test_state_has_new_fields."
+}

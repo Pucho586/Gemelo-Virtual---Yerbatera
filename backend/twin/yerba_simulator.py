@@ -320,6 +320,9 @@ class YerbaProcessSimulator:
         c = self.canchado
         return {
             "ts": datetime.now(timezone.utc).isoformat(),
+            "mode": self.mode,
+            "throughput_kgh": self.throughput_kgh,
+            "flujo": {k: round(v, 3) for k, v in self.flujo.items()},
             "ambient": {
                 "temp": round(self.ambient_temp, 2),
                 "humidity": round(self.ambient_humidity, 2),

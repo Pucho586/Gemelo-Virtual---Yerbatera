@@ -12,8 +12,22 @@ API = f"{BASE_URL}/api"
 
 @pytest.fixture(scope="session")
 def client():
+    """Session with admin bearer token for endpoints that require auth.
+
+    Public endpoints (GET /state, /history, /services/status, /weather, etc.)
+    work without auth but adding the header is harmless.
+    """
     s = requests.Session()
     s.headers.update({"Content-Type": "application/json"})
+    # admin login (seeded admin/admin)
+    try:
+        r = s.post(f"{API}/auth/login", json={"username": "admin", "password": "admin"}, timeout=10)
+        if r.status_code == 200:
+            tok = r.json().get("access_token") or r.json().get("token")
+            if tok:
+                s.headers.update({"Authorization": f"Bearer {tok}"})
+    except Exception:
+        pass
     return s
 
 

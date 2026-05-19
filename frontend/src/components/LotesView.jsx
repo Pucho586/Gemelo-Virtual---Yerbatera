@@ -68,7 +68,7 @@ export default function LotesView() {
         {showNew && (
           <div className="mt-3 space-y-3" data-testid="batch-new-form">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-              <NumberInput testid="b-kg" label="Kg entrada" value={draft.kg_entrada} onChange={(v) => setDraft({ ...draft, kg_entrada: v })} min={1} />
+              <NumberInput testid="b-kg-entrada" label="Kg entrada" value={draft.kg_entrada} onChange={(v) => setDraft({ ...draft, kg_entrada: v })} min={1} />
               <label className="flex flex-col gap-1">
                 <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">Receta</span>
                 <select data-testid="b-receta" className="field" value={draft.receta_id} onChange={(e) => setDraft({ ...draft, receta_id: e.target.value })}>
@@ -104,12 +104,12 @@ export default function LotesView() {
             {closing && (
               <div className="space-y-3 border-t pt-3" style={{ borderColor: 'var(--border)' }} data-testid="batch-close-form">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <NumberInput testid="b-close-kg" label="Kg salida" value={closeData.kg_salida} onChange={(v) => setCloseData({ ...closeData, kg_salida: v })} step={0.5} />
+                  <NumberInput testid="b-kg-salida" label="Kg salida" value={closeData.kg_salida} onChange={(v) => setCloseData({ ...closeData, kg_salida: v })} step={0.5} />
                   <TextInput testid="b-close-obs" label="Observaciones finales" value={closeData.observaciones} onChange={(v) => setCloseData({ ...closeData, observaciones: v })} />
                 </div>
                 <p className="font-mono text-xs text-slate-400">Merma: {active.kg_entrada > 0 ? (((active.kg_entrada - closeData.kg_salida) / active.kg_entrada) * 100).toFixed(2) : '–'}%</p>
                 <div className="flex gap-2">
-                  <Btn testid="b-close-confirm" onClick={closeBatch}>Cerrar y guardar</Btn>
+                  <Btn testid="b-close" onClick={closeBatch}>Cerrar y guardar</Btn>
                   <Btn testid="b-close-cancel" variant="secondary" onClick={() => setClosing(false)}>Volver</Btn>
                 </div>
               </div>

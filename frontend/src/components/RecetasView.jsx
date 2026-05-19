@@ -114,8 +114,8 @@ export default function RecetasView() {
                 </div>
               </div>
               <div className="flex gap-2">
-                <Btn testid={`r-apply-${r.id}`} variant={applied === r.id ? 'ai' : 'primary'} onClick={() => onApply(r.id)}>
-                  <span className="inline-flex items-center gap-1">{applied === r.id ? <><Check size={12}/> Aplicada</> : <><ForkKnife size={12}/> Aplicar</>}</span>
+                <Btn testid={`apply-${r.id}`} variant={applied === r.id ? 'ai' : 'primary'} onClick={() => onApply(r.id)}>
+                  <span className="inline-flex items-center gap-1">{applied === r.id ? <><Check size={12}/> <span data-testid={`recipe-applied-msg-${r.id}`}>Aplicada</span></> : <><ForkKnife size={12}/> Aplicar</>}</span>
                 </Btn>
                 {r.custom && isAdmin(user) && (
                   <Btn testid={`r-del-${r.id}`} variant="danger" onClick={() => onDelete(r.id)}><Trash size={12}/></Btn>

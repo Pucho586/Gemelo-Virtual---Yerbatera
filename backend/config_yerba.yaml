@@ -61,9 +61,9 @@ limits:
   co2_max: 8000
   tau_camera: 600
 weather:
-  latitude: -27.48683
-  longitude: -55.11994
-  city: Oberá, Provincia de Misiones, Argentina
+  latitude: -31.4
+  longitude: -64.2
+  city: Córdoba
   interval_seconds: 600
 persistence:
   enabled: true
