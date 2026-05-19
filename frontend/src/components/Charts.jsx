@@ -35,6 +35,8 @@ const tooltipStyle = {
   color: '#F8FAFC',
 };
 
+const ANIM = false; // Sin animación: no se "recarga" al cambiar de tab
+
 function shortTs(ts) {
   try {
     const d = new Date(ts);
@@ -77,8 +79,8 @@ export function ZapecadoChart({ data, height = 220 }) {
         <Tooltip contentStyle={tooltipStyle} />
         <ReferenceLine y={600} stroke={COLORS.temp} strokeDasharray="4 4" label={{ value: 'Techo 600°C', position: 'right', fill: COLORS.temp, fontSize: 10, fontFamily: 'JetBrains Mono' }} />
         <ReferenceLine y={450} stroke="#4ADE80" strokeDasharray="2 6" label={{ value: 'Setpoint', position: 'left', fill: '#4ADE80', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
-        <Line type="monotone" dataKey="zap_t" stroke={COLORS.temp} strokeWidth={2} dot={false} name="Zapecado" />
-        <Line type="monotone" dataKey="ambient_t" stroke={COLORS.ambient} strokeWidth={1.5} dot={false} strokeDasharray="4 3" name="Ambiente" />
+        <Line isAnimationActive={false} type="monotone" dataKey="zap_t" stroke={COLORS.temp} strokeWidth={2} dot={false} name="Zapecado" />
+        <Line isAnimationActive={false} type="monotone" dataKey="ambient_t" stroke={COLORS.ambient} strokeWidth={1.5} dot={false} strokeDasharray="4 3" name="Ambiente" />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -93,9 +95,9 @@ export function SecadoChart({ data, height = 220 }) {
         <YAxis yAxisId="t" domain={[0, 130]} {...axisProps} unit="°" />
         <YAxis yAxisId="h" orientation="right" domain={[0, 100]} {...axisProps} unit="%" />
         <Tooltip contentStyle={tooltipStyle} />
-        <Line yAxisId="t" type="monotone" dataKey="sec_t" stroke={COLORS.temp} strokeWidth={2} dot={false} name="Temp" />
-        <Line yAxisId="h" type="monotone" dataKey="sec_h" stroke={COLORS.hum} strokeWidth={2} dot={false} name="Humedad" />
-        <Line yAxisId="t" type="monotone" dataKey="ambient_t" stroke={COLORS.ambient} strokeWidth={1} dot={false} strokeDasharray="3 3" name="Ambiente" />
+        <Line isAnimationActive={false} yAxisId="t" type="monotone" dataKey="sec_t" stroke={COLORS.temp} strokeWidth={2} dot={false} name="Temp" />
+        <Line isAnimationActive={false} yAxisId="h" type="monotone" dataKey="sec_h" stroke={COLORS.hum} strokeWidth={2} dot={false} name="Humedad" />
+        <Line isAnimationActive={false} yAxisId="t" type="monotone" dataKey="ambient_t" stroke={COLORS.ambient} strokeWidth={1} dot={false} strokeDasharray="3 3" name="Ambiente" />
       </LineChart>
     </ResponsiveContainer>
   );
@@ -115,7 +117,7 @@ export function CanchadoChart({ data, height = 220 }) {
         <XAxis dataKey="t" {...axisProps} minTickGap={32} />
         <YAxis domain={[0, 15]} {...axisProps} unit="mm" />
         <Tooltip contentStyle={tooltipStyle} />
-        <Area type="monotone" dataKey="can_p" stroke={COLORS.rpm} strokeWidth={2} fill="url(#canGrad)" name="Tamaño partícula" />
+        <Area isAnimationActive={false} type="monotone" dataKey="can_p" stroke={COLORS.rpm} strokeWidth={2} fill="url(#canGrad)" name="Tamaño partícula" />
       </AreaChart>
     </ResponsiveContainer>
   );
@@ -139,7 +141,7 @@ export function CamarasChart({ data, metric = 'temp', height = 220 }) {
         <YAxis domain={domain} {...axisProps} unit={unit} />
         <Tooltip contentStyle={tooltipStyle} />
         {keyMap[metric].map((k, i) => (
-          <Line key={k} type="monotone" dataKey={k} stroke={colors[i]} strokeWidth={2} dot={false} name={`Cámara ${i + 1}`} />
+          <Line isAnimationActive={false} key={k} type="monotone" dataKey={k} stroke={colors[i]} strokeWidth={2} dot={false} name={`Cámara ${i + 1}`} />
         ))}
       </LineChart>
     </ResponsiveContainer>
@@ -150,7 +152,7 @@ export function MiniSparkline({ data, dataKey, color = '#4ADE80', height = 36 })
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 2, right: 0, left: 0, bottom: 0 }}>
-        <Line type="monotone" dataKey={dataKey} stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
+        <Line isAnimationActive={false} type="monotone" dataKey={dataKey} stroke={color} strokeWidth={1.5} dot={false} isAnimationActive={false} />
       </LineChart>
     </ResponsiveContainer>
   );

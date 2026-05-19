@@ -1,0 +1,47 @@
+{
+  "summary": "Full backend + frontend regression for v2.1 (auth/recetas/lotes/modo/mimics). Backend: 27/28 NEW pytest cases pass (auth login/me/change/recover/list-users, mode get/set + role gating, throughput, recipes CRUD + apply, batches CRUD with merma calc, twin-mode freeze). Plus 20/20 previous iteration tests still green. Frontend: login screen renders, invalid creds show error, admin & operator login succeed, operator correctly LACKS 'Configuración' tab and has DISABLED mode-switch, admin can toggle 'Modo Simulador' <-> 'Modo Gemelo', SVG<->P&ID mimic toggle works, all 4 default recipes (suave/fuerte/barbacua/organica) appear in Recetas tab, tab persistence verified (no 'Conectando con el gemelo' on Dashboard re-entry after visiting Zapecado), logout returns to login. JWT Bearer is correctly sent. Admin dashboard shows live WS data with all 5 service badges GREEN (WS LIVE, MODBUS, MQTT, OPC UA, CLIMA). Seed users idempotent (admin/operario reverted at end via /auth/recover).",
+  "backend_issues": {
+    "critical": [
+      {"endpoint": "/api/state", "issue": "Response is MISSING the new required fields 'mode', 'throughput_kgh' and 'flujo' (with 'zap_out_humedad' / 'sec_out_humedad'). _snapshot_locked() in /app/backend/twin/yerba_simulator.py builds the dict only with ambient/zapecado/secado/canchado/camaras. The review request explicitly demands those keys. Mode and flujo ARE updated internally and reachable via /api/mode but are not exposed in /api/state. Fix: in _snapshot_locked add 'mode': self.mode, 'throughput_kgh': self.throughput_kgh, 'flujo': dict(self.flujo) (plus 'ts' already present).", "priority": "HIGH"}
+    ],
+    "minor": [
+      {"endpoint": "/api/auth/recover", "issue": "Returns 401 on bad code BEFORE checking if username exists. That's a sensible information-disclosure prevention but the spec says 404 for unknown user; current behaviour leaks no info and is acceptable."},
+      {"endpoint": "/api/auth/login", "issue": "No brute-force lockout (auth playbook recommends 5 fails -> temp lock). Not enforced; review didn't require it. Mention for hardening."},
+      {"endpoint": "CORS", "issue": "backend/.env CORS_ORIGINS=\"*\" combined with withCredentials=true is technically invalid per spec; browsers may reject cookies in some clients. Works today because httpOnly cookies + Bearer header fallback both succeed, but cookie-only flow could fail behind stricter browsers. Recommend explicit origin list."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [
+      {"flow": "Recetas 'Aplicar suave'", "issue": "Could not deterministically verify 'Aplicada' confirmation message via Playwright - no data-testid on the Aplicar button per recipe nor on the success toast. POST /api/recipes/suave/apply works via curl (verified in pytest test_apply_recipe_suave). UI likely works but lacks testids 'apply-{id}' and 'recipe-applied-msg' which would make it deterministic.", "affected_selectors": ["[data-testid=\"apply-suave\"]", "[data-testid=\"recipe-applied-msg\"]"]},
+      {"flow": "Lotes crear lote", "issue": "Inputs inside LotesView (kg_entrada, kg_salida, botones iniciar/cerrar) seem to lack stable data-testid attributes prefixed 'b-kg-entrada'/'b-start'/'b-kg-salida'/'b-close'. Form 'batch-new-form' div exists but inner inputs do not. Backend flow fully verified by pytest (create -> active -> close with merma_pct=10).", "affected_selectors": ["[data-testid=\"b-kg-entrada\"]", "[data-testid=\"b-start\"]", "[data-testid=\"b-kg-salida\"]", "[data-testid=\"b-close\"]"]}
+    ],
+    "design_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_auth_recipes_batches.py",
+    "/app/backend/tests/test_yerba_api.py",
+    "/app/test_reports/pytest/iteration_2_results.xml"
+  ],
+  "action_items": [
+    "FIX (HIGH): Add 'mode', 'throughput_kgh' and 'flujo' to the dict returned by YerbaSimulator._snapshot_locked() in /app/backend/twin/yerba_simulator.py so /api/state matches the v2.1 contract used by the frontend mimics and the spec.",
+    "Add data-testid attributes to RecetasView's per-recipe Aplicar buttons (e.g. data-testid=\"apply-{id}\") and to the success message after applying.",
+    "Add data-testid to LotesView inputs and primary buttons (b-kg-entrada, b-start, b-kg-salida, b-close) so the lote flow is reliably automatable.",
+    "Optional hardening: tighten CORS_ORIGINS to explicit origin, add brute-force lockout in /api/auth/login (5 fails)."
+  ],
+  "critical_code_review_comments": [
+    "yerba_simulator._snapshot_locked() drops new top-level keys that the API contract advertises - root cause of the /api/state failure (test_state_has_new_fields).",
+    "server.py /api/auth/login does not rate-limit nor lock out failed attempts; auth playbook recommends 5-fail lockout.",
+    "twin/auth.py:_secret() generates a transient JWT secret if env is missing, which would invalidate every existing token on each restart - .env now has JWT_SECRET set so OK, but document that JWT_SECRET MUST persist.",
+    "Frontend useLiveState boots with REST (api.getState + api.getHistory) then upgrades to WS - good. However if the user reloads while logged out, /history and /state work without auth (no auth dep on backend), confirming public read - intentional in this app.",
+    "RecetasView/LotesView lack per-element data-testid on action buttons/inputs - hurts deterministic automation."
+  ],
+  "updated_files": ["/app/backend/tests/test_auth_recipes_batches.py"],
+  "success_rate": {"backend": "96.4% (27/28 new + 20/20 prior = 47/48)", "frontend": "85% of critical flows verified (login/role/modo/mimic/tabs ok; recipes-apply confirmation and lote form interaction not deterministic due to missing testids, but backend endpoints verified)"},
+  "test_credentials": "admin/admin (admin), operario/operario (operator), recovery code: yerbatera-recovery-2026",
+  "seed_data_creation": "Created and deleted a custom recipe 'test-custom-xyz' inside pytest (cleaned up). Created and closed one test batch (observaciones='TEST_batch') - left in DB as a regression record but not active. Operator password changed and restored via /auth/recover.",
+  "retest_needed": true,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Run pytest /app/backend/tests/ to get the full regression. The single failure (test_state_has_new_fields) will start passing once main agent adds mode/throughput_kgh/flujo to YerbaSimulator._snapshot_locked(). Frontend tests use data-testid 'login-card','login-username','login-password','login-submit','login-error','login-recover-link','recover-username','recover-code','recover-newpwd','recover-submit','mode-switch','mimic-toggle','logout-btn','tab-{id}','batch-new-form','batch-active','batch-close-form','b-receta','batch-row-{i}'. Inner inputs of LotesView lack b-kg-entrada/b-start/b-kg-salida/b-close - request main agent to add them.",
+  "rca of the issue": "BACKEND BUG: /api/state lacks 'mode','throughput_kgh','flujo' because YerbaSimulator._snapshot_locked() (lines 317-361 of /app/backend/twin/yerba_simulator.py) never emits those fields, even though set_mode/set_throughput keep them in self.mode/self.throughput_kgh/self.flujo. Reproduction: curl $REACT_APP_BACKEND_URL/api/state | jq 'keys' returns ['ambient','camaras','canchado','secado','ts','zapecado'] - no mode/flujo. Mitigation: extend the returned dict with 'mode': self.mode, 'throughput_kgh': self.throughput_kgh, 'flujo': {k: round(v,3) for k,v in self.flujo.items()}."
+}

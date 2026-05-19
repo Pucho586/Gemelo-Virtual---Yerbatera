@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Metric, Toggle, Slider } from './UI';
 import { SecadoChart, flatten } from './Charts';
+import { SecadoMimic, SecadoPid } from './Mimics';
 import { api } from '../lib/api';
 import { Drop, Wind } from '@phosphor-icons/react';
 
-export default function SecadoView({ state, series }) {
+export default function SecadoView({ state, series, mimicStyle = 'svg' }) {
   const s = state?.secado;
   const ambient = state?.ambient;
   const [aire, setAire] = useState(s?.velocidad_aire ?? 2.5);
@@ -28,14 +29,9 @@ export default function SecadoView({ state, series }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-px hair-grid">
-      <Card className="lg:col-span-2 p-0" testid="secado-chart-card">
-        <CardHeader
-          title="Secado · Temperatura & Humedad"
-          subtitle="Piso dinámico de humedad: 25% de la humedad ambiente · setpoint 95°C"
-        />
-        <div className="p-2 sm:p-4">
-          <SecadoChart data={data} />
-        </div>
+      <Card className="lg:col-span-2 p-0" testid="secado-mimic-card">
+        <CardHeader title="Secado · Mímico" subtitle={mimicStyle === 'pid' ? 'P&ID estándar' : 'Vista animada del secador'} />
+        <div className="p-4">{mimicStyle === 'pid' ? <SecadoPid data={s} /> : <SecadoMimic data={s} />}</div>
       </Card>
 
       <Card className="p-6" testid="secado-controls-card">
@@ -70,11 +66,9 @@ export default function SecadoView({ state, series }) {
         </div>
       </Card>
 
-      <Card className="lg:col-span-3 p-6" testid="secado-info">
-        <div className="flex items-start gap-2 text-sm text-slate-400 leading-relaxed">
-          <Wind size={16} className="text-blue-300 mt-0.5" />
-          <p>La tasa de secado es proporcional a √(velocidad_aire) y al delta con el piso ambiente. Un día más húmedo en Posadas hará que la humedad final estabilice más alta — algo invisible en la versión original.</p>
-        </div>
+      <Card className="lg:col-span-3 p-0" testid="secado-chart-card">
+        <CardHeader title="Histórico · Temperatura & humedad" subtitle="Piso dinámico HR = 25% del ambiente" />
+        <div className="p-2 sm:p-4"><SecadoChart data={data} /></div>
       </Card>
     </div>
   );

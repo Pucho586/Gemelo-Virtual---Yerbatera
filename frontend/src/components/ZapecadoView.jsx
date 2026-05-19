@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Metric, Btn, Toggle, Slider, NumberInput } from './UI';
 import { ZapecadoChart, flatten } from './Charts';
+import { ZapecadoMimic, ZapecadoPid } from './Mimics';
 import { api } from '../lib/api';
 import { Fire, Wind, Thermometer } from '@phosphor-icons/react';
 
-export default function ZapecadoView({ state, series }) {
+export default function ZapecadoView({ state, series, mimicStyle = 'svg' }) {
   const z = state?.zapecado;
   const ambient = state?.ambient;
   const [tambor, setTambor] = useState(z?.velocidad_tambor ?? 15);
@@ -30,14 +31,10 @@ export default function ZapecadoView({ state, series }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-px hair-grid">
-      <Card className="lg:col-span-2 p-0" testid="zapecado-chart-card">
-        <CardHeader
-          title="Zapecado · Temperatura en vivo"
-          subtitle="Setpoint dinámico 400-600°C según vel. de chips · ambiente Open-Meteo"
-          action={<span className="font-mono text-[10px] text-slate-500">{data.length} pts · ventana ~3 min</span>}
-        />
-        <div className="p-2 sm:p-4">
-          <ZapecadoChart data={data} />
+      <Card className="lg:col-span-2 p-0" testid="zapecado-mimic-card">
+        <CardHeader title="Zapecado · Mímico en vivo" subtitle={mimicStyle === 'pid' ? 'Diagrama P&ID estilo industrial' : 'Vista esquemática animada del horno'} />
+        <div className="p-4">
+          {mimicStyle === 'pid' ? <ZapecadoPid data={z} /> : <ZapecadoMimic data={z} />}
         </div>
       </Card>
 
@@ -77,20 +74,10 @@ export default function ZapecadoView({ state, series }) {
         </div>
       </Card>
 
-      <Card className="lg:col-span-3 p-6" testid="zapecado-info">
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 text-sm text-slate-400 leading-relaxed">
-          <div>
-            <div className="flex items-center gap-2 text-slate-200 mb-1"><Thermometer size={16}/> Dinámica térmica</div>
-            <p>El horno responde con τ=90s. Si la alimentación se corta, la curva tiende a la <span className="text-amber-300">temperatura ambiente real</span> y no a 120°C fijo como en la versión previa.</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 text-slate-200 mb-1"><Fire size={16}/> Setpoint dinámico</div>
-            <p>Target = 400 + 1.0 · vel_chips (clamp 350-600°C). Más chips, más demanda térmica.</p>
-          </div>
-          <div>
-            <div className="flex items-center gap-2 text-slate-200 mb-1"><Wind size={16}/> Ruido</div>
-            <p>±0.4°C aleatorio por paso para simular sensor real. Clamp duro a 620°C.</p>
-          </div>
+      <Card className="lg:col-span-3 p-0" testid="zapecado-chart-card">
+        <CardHeader title="Histórico · Temperatura" subtitle="Setpoint dinámico 400-600°C según vel. de chips · ambiente Open-Meteo" action={<span className="font-mono text-[10px] text-slate-500">{data.length} pts</span>} />
+        <div className="p-2 sm:p-4">
+          <ZapecadoChart data={data} />
         </div>
       </Card>
     </div>

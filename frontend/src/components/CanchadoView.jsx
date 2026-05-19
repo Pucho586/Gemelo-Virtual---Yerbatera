@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Metric, Toggle, Slider } from './UI';
 import { CanchadoChart, flatten } from './Charts';
+import { CanchadoMimic, CanchadoPid } from './Mimics';
 import { api } from '../lib/api';
 import { Cube } from '@phosphor-icons/react';
 
-export default function CanchadoView({ state, series }) {
+export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
   const c = state?.canchado;
   const [rpm, setRpm] = useState(c?.velocidad_molino ?? 60);
   const [estado, setEstado] = useState(c?.estado ?? true);
@@ -27,14 +28,9 @@ export default function CanchadoView({ state, series }) {
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-px hair-grid">
-      <Card className="lg:col-span-2 p-0" testid="canchado-chart-card">
-        <CardHeader
-          title="Canchado · Tamaño de partícula"
-          subtitle="A mayor rpm, menor tamaño. Target = 10 − 0.07·rpm (mm)"
-        />
-        <div className="p-2 sm:p-4">
-          <CanchadoChart data={data} />
-        </div>
+      <Card className="lg:col-span-2 p-0" testid="canchado-mimic-card">
+        <CardHeader title="Canchado · Mímico" subtitle={mimicStyle === 'pid' ? 'P&ID' : 'Animación del molino'} />
+        <div className="p-4">{mimicStyle === 'pid' ? <CanchadoPid data={c} /> : <CanchadoMimic data={c} />}</div>
       </Card>
 
       <Card className="p-6" testid="canchado-controls-card">
@@ -61,6 +57,10 @@ export default function CanchadoView({ state, series }) {
             </div>
           </div>
         </div>
+      </Card>
+      <Card className="lg:col-span-3 p-0" testid="canchado-chart-card">
+        <CardHeader title="Histórico · Tamaño de partícula" subtitle="Target = 10 − 0.07·rpm" />
+        <div className="p-2 sm:p-4"><CanchadoChart data={data} /></div>
       </Card>
     </div>
   );

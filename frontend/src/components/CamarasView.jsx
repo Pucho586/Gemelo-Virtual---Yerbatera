@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
 import { Card, CardHeader, Metric, Toggle, NumberInput, SectionTitle } from './UI';
 import { CamarasChart, flatten } from './Charts';
+import { CamaraMimic, CamaraPid } from './Mimics';
 import { api } from '../lib/api';
 import { Cloud, Drop, Thermometer, Fan, Package } from '@phosphor-icons/react';
 
-function ChamberCard({ cam, idx }) {
+function ChamberCard({ cam, idx, mimicStyle }) {
   const [carga, setCarga] = useState(cam.carga_kg);
   const [vent, setVent] = useState(cam.ventilador);
   const [tObj, setTObj] = useState(cam.temperatura_obj);
@@ -27,9 +28,12 @@ function ChamberCard({ cam, idx }) {
 
   return (
     <Card className="p-5" testid={`camara-card-${idx}`}>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-3">
         <h4 className="font-display text-base font-medium text-slate-100">{cam.nombre}</h4>
         <span className="font-mono text-[10px] text-slate-500">ID #{idx + 1}</span>
+      </div>
+      <div className="mb-4 border" style={{ borderColor: 'var(--border)' }}>
+        {mimicStyle === 'pid' ? <CamaraPid data={cam} /> : <CamaraMimic data={cam} />}
       </div>
       <div className="grid grid-cols-3 gap-4 mb-4">
         <Metric label="Temp" value={cam.temperatura.toFixed(1)} unit="°C" color={tempColor} testid={`cam-${idx}-temp`} />
@@ -54,7 +58,7 @@ function ChamberCard({ cam, idx }) {
   );
 }
 
-export default function CamarasView({ state, series }) {
+export default function CamarasView({ state, series, mimicStyle = 'svg' }) {
   const camaras = state?.camaras || [];
   const data = flatten(series);
   const [metric, setMetric] = useState('temp'); // temp | hum | co2
@@ -86,7 +90,7 @@ export default function CamarasView({ state, series }) {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-px hair-grid">
         {camaras.map((cam, i) => (
-          <ChamberCard key={i} cam={cam} idx={i} />
+          <ChamberCard key={i} cam={cam} idx={i} mimicStyle={mimicStyle} />
         ))}
       </div>
     </div>

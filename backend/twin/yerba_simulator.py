@@ -184,6 +184,20 @@ class YerbaProcessSimulator:
         self.aceleracion = float(config.get("simulacion", {}).get("aceleracion", 60.0))
         self.last_update = time.time()
 
+        # Modo de operación: 'simulator' (simula matemáticamente) o 'twin' (valores
+        # vienen de fuente externa: API, Modbus client externo, MQTT subscribe).
+        self.mode = config.get("simulacion", {}).get("mode", "simulator")
+
+        # Throughput / flujo de masa entre etapas (kg/h)
+        self.throughput_kgh = float(config.get("simulacion", {}).get("throughput_kgh", 800.0))
+
+        # Estado de flujo: humedad de salida real de cada etapa
+        self.flujo = {
+            "zap_out_humedad": 35.0,   # entra hoja verde ~50%, sale ~30-40%
+            "sec_out_humedad": 8.0,    # sale del secado ~7-10%
+            "can_out_kgh": self.throughput_kgh * 0.96,  # 4% merma típica en canchado
+        }
+
         # Clima inicial (será actualizado por WeatherService)
         self.ambient_temp = 24.0  # °C (default Posadas)
         self.ambient_humidity = 70.0  # %
@@ -203,6 +217,16 @@ class YerbaProcessSimulator:
             self.ambient_temp = float(temp)
             self.ambient_humidity = float(humidity)
             self.weather_meta.update(meta)
+
+    def set_mode(self, mode: str):
+        if mode not in ("simulator", "twin"):
+            raise ValueError("mode debe ser 'simulator' o 'twin'")
+        with self.lock:
+            self.mode = mode
+
+    def set_throughput(self, kgh: float):
+        with self.lock:
+            self.throughput_kgh = float(kgh)
 
     def set_zapecado(self, *, velocidad_tambor=None, velocidad_chip=None, estado_alimentacion=None):
         with self.lock:
@@ -254,11 +278,29 @@ class YerbaProcessSimulator:
         dt = dt_real * self.aceleracion
 
         with self.lock:
-            self.zapecado.update(dt, self.ambient_temp)
-            self.secado.update(dt, self.ambient_temp, self.ambient_humidity)
-            self.canchado.update(dt)
-            for cam in self.camaras:
-                cam.update(dt, self.ambient_temp, self.ambient_humidity)
+            if self.mode == "simulator":
+                self.zapecado.update(dt, self.ambient_temp)
+                self.secado.update(dt, self.ambient_temp, self.ambient_humidity)
+                self.canchado.update(dt)
+                for cam in self.camaras:
+                    cam.update(dt, self.ambient_temp, self.ambient_humidity)
+
+                # Flujo de masa: el zapecado quita humedad de la hoja (50% → 30-40%).
+                # La salida del zapecado entra al secado, que termina de bajar a ~7-10%.
+                # Mayor temperatura de zapecado y mayor velocidad de chips → más humedad evaporada.
+                zap_eff = max(0.0, min(1.0, (self.zapecado.temperatura - 350) / 200.0))
+                self.flujo["zap_out_humedad"] = 50.0 - 18.0 * zap_eff
+                # La humedad inicial del secado tiende a la salida del zapecado
+                # (modelo lento, integrado en el secado real más arriba). Acoplamos un
+                # leve pull para que se vea la dependencia:
+                self.secado.humedad += (self.flujo["zap_out_humedad"] - self.secado.humedad) * 0.001 * dt
+                self.flujo["sec_out_humedad"] = self.secado.humedad
+                self.flujo["can_out_kgh"] = self.throughput_kgh * 0.96
+            else:
+                # Modo Gemelo: no recalcula; solo aplica ruido pequeño y respeta clamps.
+                # Los valores son escritos por API/Modbus/MQTT externos.
+                pass
+
             snapshot = self._snapshot_locked()
             self.history.append(snapshot)
         return snapshot

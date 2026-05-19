@@ -46,6 +46,8 @@ secado:
   velocidad_aire: 2.5
 simulacion:
   aceleracion: 30
+  mode: simulator
+  throughput_kgh: 1234.5
 zapecado:
   temperatura_inicial: 450
   velocidad_chip: 30
