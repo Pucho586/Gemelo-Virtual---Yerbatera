@@ -41,6 +41,21 @@ export const api = {
   patchSecado: (body) => http.post('/secado', body).then(r => r.data),
   patchCanchado: (body) => http.post('/canchado', body).then(r => r.data),
   patchCamara: (idx, body) => http.post(`/camaras/${idx}`, body).then(r => r.data),
+  setCamarasCount: (count) => http.post('/camaras/count', { count }).then(r => r.data),
+  // FASE 4: Replay
+  replayFiles: () => http.get('/replay/files').then(r => r.data),
+  replayStatus: () => http.get('/replay/status').then(r => r.data),
+  replayStart: (body) => http.post('/replay/start', body).then(r => r.data),
+  replayStop: () => http.post('/replay/stop').then(r => r.data),
+  replayPause: (paused) => http.post('/replay/pause', { paused }).then(r => r.data),
+  replaySeek: (row) => http.post('/replay/seek', { row }).then(r => r.data),
+  replaySpeed: (speed) => http.post('/replay/speed', { speed }).then(r => r.data),
+  // FASE 4: What-if
+  whatifList: () => http.get('/whatif').then(r => r.data),
+  whatifCreate: (body) => http.post('/whatif', body).then(r => r.data),
+  whatifUpdate: (id, overrides) => http.post(`/whatif/${id}`, { overrides }).then(r => r.data),
+  whatifDelete: (id) => http.delete(`/whatif/${id}`).then(r => r.data),
+  whatifResetAll: () => http.post('/whatif/reset').then(r => r.data),
   // Config
   getConfig: () => http.get('/config').then(r => r.data),
   patchConfig: (body) => http.post('/config', body).then(r => r.data),

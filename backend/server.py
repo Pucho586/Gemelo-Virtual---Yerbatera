@@ -151,6 +151,14 @@ class CamaraPatch(BaseModel):
     temperatura_obj: Optional[float] = None
     humedad_obj: Optional[float] = None
     co2_obj: Optional[float] = None
+    vapor_activo: Optional[bool] = None
+    vapor_caudal_kgh: Optional[float] = None
+    vapor_setpoint_temp: Optional[float] = None
+    vapor_setpoint_hum: Optional[float] = None
+
+
+class CamarasCountBody(BaseModel):
+    count: int
 
 
 class ChatRequest(BaseModel):
@@ -318,6 +326,28 @@ async def patch_secado(p: SecadoPatch, user=Depends(current_user_dep)):
 async def patch_canchado(p: CanchadoPatch, user=Depends(current_user_dep)):
     get_runtime().simulator.set_canchado(**p.model_dump(exclude_none=True))
     return get_runtime().simulator.get_state()["canchado"]
+
+
+@api.post("/camaras/count")
+async def set_camaras_count(body: CamarasCountBody, user=Depends(admin_only)):
+    rt = get_runtime()
+    n = rt.simulator.set_camaras_count(body.count)
+    # Persistir cámaras actuales en config
+    rt.config["camaras"] = [
+        {
+            "nombre": cam.nombre,
+            "temperatura_objetivo": cam.temperatura_obj,
+            "humedad_objetivo": cam.humedad_obj,
+            "co2_objetivo": cam.co2_obj,
+            "vapor_activo": cam.vapor_activo,
+            "vapor_caudal_kgh": cam.vapor_caudal_kgh,
+            "vapor_setpoint_temp": cam.vapor_setpoint_temp,
+            "vapor_setpoint_hum": cam.vapor_setpoint_hum,
+        } for cam in rt.simulator.camaras
+    ]
+    from twin.runtime import save_config
+    save_config(rt.config)
+    return {"count": n, "max": rt.simulator.MAX_CAMARAS, "camaras": rt.simulator.get_state()["camaras"]}
 
 
 @api.post("/camaras/{idx}")
@@ -823,6 +853,159 @@ async def report_batch(batch_id: str, user=Depends(current_user_dep)):
     }
     path = build_batch_report(batch, summary)
     return FileResponse(path, filename=path.name, media_type="application/pdf")
+
+
+# ============================ FASE 4: REPLAY ============================
+
+class ReplayStartBody(BaseModel):
+    file: str
+    speed: Optional[float] = 10.0
+    start_row: Optional[int] = 0
+
+
+class ReplaySpeedBody(BaseModel):
+    speed: float
+
+
+class ReplaySeekBody(BaseModel):
+    row: int
+
+
+class ReplayPauseBody(BaseModel):
+    paused: bool
+
+
+@api.get("/replay/files")
+async def replay_files():
+    rt = get_runtime()
+    if not rt.replay:
+        return []
+    return rt.replay.list_files()
+
+
+@api.get("/replay/status")
+async def replay_status():
+    rt = get_runtime()
+    if not rt.replay:
+        return {"active": False}
+    return rt.replay.status()
+
+
+@api.post("/replay/start")
+async def replay_start(body: ReplayStartBody, user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.replay:
+        raise HTTPException(503, "Replay no inicializado")
+    try:
+        st = rt.replay.start(body.file, speed=body.speed or 10.0, start_row=body.start_row or 0)
+    except FileNotFoundError:
+        raise HTTPException(404, f"Archivo {body.file} no encontrado")
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    # Cambiar modo a replay
+    rt.simulator.set_mode("replay")
+    rt.update_config({"simulacion": {"mode": "replay"}})
+    return st
+
+
+@api.post("/replay/stop")
+async def replay_stop(user=Depends(admin_only)):
+    rt = get_runtime()
+    if rt.replay:
+        rt.replay.stop()
+    # Volver a simulator
+    rt.simulator.set_mode("simulator")
+    rt.update_config({"simulacion": {"mode": "simulator"}})
+    return {"ok": True}
+
+
+@api.post("/replay/pause")
+async def replay_pause(body: ReplayPauseBody, user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.replay:
+        raise HTTPException(503, "Replay no inicializado")
+    rt.replay.pause(body.paused)
+    return rt.replay.status()
+
+
+@api.post("/replay/seek")
+async def replay_seek(body: ReplaySeekBody, user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.replay:
+        raise HTTPException(503, "Replay no inicializado")
+    rt.replay.seek(body.row)
+    return rt.replay.status()
+
+
+@api.post("/replay/speed")
+async def replay_speed(body: ReplaySpeedBody, user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.replay:
+        raise HTTPException(503, "Replay no inicializado")
+    rt.replay.set_speed(body.speed)
+    return rt.replay.status()
+
+
+# ============================ FASE 4: WHAT-IF ============================
+
+class WhatIfCreateBody(BaseModel):
+    name: str
+    overrides: Dict[str, Any] = {}
+
+
+class WhatIfUpdateBody(BaseModel):
+    overrides: Dict[str, Any]
+
+
+@api.get("/whatif")
+async def whatif_list():
+    rt = get_runtime()
+    if not rt.whatif:
+        return []
+    return rt.whatif.list()
+
+
+@api.post("/whatif")
+async def whatif_create(body: WhatIfCreateBody, user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.whatif:
+        raise HTTPException(503, "What-if no inicializado")
+    try:
+        sc = rt.whatif.create(body.name, body.overrides)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    return sc.to_dict()
+
+
+@api.post("/whatif/reset")
+async def whatif_reset_all(user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.whatif:
+        raise HTTPException(503, "What-if no inicializado")
+    rt.whatif.reset_all()
+    return {"ok": True}
+
+
+@api.post("/whatif/{scenario_id}")
+async def whatif_update(scenario_id: str, body: WhatIfUpdateBody, user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.whatif:
+        raise HTTPException(503, "What-if no inicializado")
+    sc = rt.whatif.update_overrides(scenario_id, body.overrides)
+    if not sc:
+        raise HTTPException(404, "Escenario no encontrado")
+    return sc.to_dict()
+
+
+@api.delete("/whatif/{scenario_id}")
+async def whatif_delete(scenario_id: str, user=Depends(admin_only)):
+    rt = get_runtime()
+    if not rt.whatif:
+        raise HTTPException(503, "What-if no inicializado")
+    ok = rt.whatif.delete(scenario_id)
+    if not ok:
+        raise HTTPException(404, "Escenario no encontrado")
+    return {"ok": True}
 
 
 app.include_router(api)

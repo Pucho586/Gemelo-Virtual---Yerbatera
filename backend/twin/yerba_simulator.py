@@ -111,7 +111,12 @@ class Canchado:
 
 
 class CamaraMaduracion:
-    """Cámara de maduración de yerba (estacionamiento controlado)."""
+    """Cámara de maduración de yerba (estacionamiento controlado).
+
+    Ahora con inyección de vapor: cuando está activa, fuerza T y H hacia los
+    setpoints de vapor con una constante de tiempo más corta (acción rápida).
+    El caudal de vapor (kg/h) escala qué tan rápido se llega al setpoint.
+    """
 
     def __init__(self, camara_id: int, config: Dict, limits: Dict):
         self.id = camara_id
@@ -127,6 +132,13 @@ class CamaraMaduracion:
         self.carga_kg = 0.0
         self.tiempo_maduracion = 0.0  # días
 
+        # Inyección de vapor
+        self.vapor_activo: bool = bool(config.get("vapor_activo", False))
+        self.vapor_caudal_kgh: float = float(config.get("vapor_caudal_kgh", 0.0))   # 0-50 kg/h
+        self.vapor_setpoint_temp: float = float(config.get("vapor_setpoint_temp", self.temperatura_obj))
+        self.vapor_setpoint_hum: float = float(config.get("vapor_setpoint_hum", self.humedad_obj))
+        self.vapor_kg_acum: float = 0.0  # vapor inyectado acumulado (para costos)
+
         self.lim = limits
         self.tau = float(limits.get("tau_camera", 600))
 
@@ -135,23 +147,34 @@ class CamaraMaduracion:
         if self.carga_kg > 0:
             self.tiempo_maduracion += dt / 86400.0
 
-        # Cuando la cámara está activa, busca su setpoint.
-        # Cuando el ventilador está apagado, se mezcla con el ambiente
-        # (intercambio térmico pasivo).
-        if self.ventilador:
+        # Tres modos: vapor activo / solo ventilador / pasivo
+        if self.vapor_activo and self.vapor_caudal_kgh > 0:
+            # Vapor inyectado: tau más corto y proporcional al caudal (más kg/h → más rápido)
+            # 50 kg/h = factor 1.0 (tau 60 s). 5 kg/h = factor 0.1 (tau 600 s).
+            speed = max(0.05, min(1.0, self.vapor_caudal_kgh / 50.0))
+            tau_steam = self.tau * (0.1 + 0.2 * (1.0 - speed))  # 60-180s típicamente
+            target_t = self.vapor_setpoint_temp
+            target_h = self.vapor_setpoint_hum
+            self.temperatura += (target_t - self.temperatura) / tau_steam * dt
+            self.humedad += (target_h - self.humedad) / tau_steam * dt
+            # Acumular consumo de vapor (kg). dt en segundos sim.
+            self.vapor_kg_acum += self.vapor_caudal_kgh * dt / 3600.0
+        elif self.ventilador:
+            # Solo ventilación: tau original hacia setpoint clásico
             target_t = self.temperatura_obj
             target_h = self.humedad_obj
+            self.temperatura += (target_t - self.temperatura) / self.tau * dt
+            self.humedad += (target_h - self.humedad) / self.tau * dt
         else:
-            # 70% ambiente, 30% setpoint (aislación parcial)
+            # Pasivo: 70% ambiente, 30% setpoint
             target_t = 0.7 * ambient_temp + 0.3 * self.temperatura_obj
             target_h = 0.7 * ambient_humidity + 0.3 * self.humedad_obj
-
-        self.temperatura += (target_t - self.temperatura) / self.tau * dt
-        self.humedad += (target_h - self.humedad) / self.tau * dt
+            self.temperatura += (target_t - self.temperatura) / self.tau * dt
+            self.humedad += (target_h - self.humedad) / self.tau * dt
 
         # Producción de CO2 por respiración de la yerba
         self.co2 += CO2_RATE * self.carga_kg * dt
-        if self.ventilador:
+        if self.ventilador or (self.vapor_activo and self.vapor_caudal_kgh > 0):
             self.co2 -= (self.co2 - self.co2_obj) * 0.15 * dt
         else:
             # se acerca al CO2 ambiente (~420 ppm)
@@ -219,8 +242,8 @@ class YerbaProcessSimulator:
             self.weather_meta.update(meta)
 
     def set_mode(self, mode: str):
-        if mode not in ("simulator", "twin", "shadow"):
-            raise ValueError("mode debe ser 'simulator', 'twin' o 'shadow'")
+        if mode not in ("simulator", "twin", "shadow", "replay"):
+            raise ValueError("mode debe ser 'simulator', 'twin', 'shadow' o 'replay'")
         with self.lock:
             self.mode = mode
 
@@ -255,7 +278,9 @@ class YerbaProcessSimulator:
                 c.estado = bool(estado)
 
     def set_camara(self, idx: int, *, carga_kg=None, ventilador=None,
-                   temperatura_obj=None, humedad_obj=None, co2_obj=None):
+                   temperatura_obj=None, humedad_obj=None, co2_obj=None,
+                   vapor_activo=None, vapor_caudal_kgh=None,
+                   vapor_setpoint_temp=None, vapor_setpoint_hum=None):
         with self.lock:
             if idx < 0 or idx >= len(self.camaras):
                 return
@@ -270,6 +295,60 @@ class YerbaProcessSimulator:
                 cam.humedad_obj = float(humedad_obj)
             if co2_obj is not None:
                 cam.co2_obj = float(co2_obj)
+            if vapor_activo is not None:
+                cam.vapor_activo = bool(vapor_activo)
+            if vapor_caudal_kgh is not None:
+                cam.vapor_caudal_kgh = max(0.0, min(200.0, float(vapor_caudal_kgh)))
+            if vapor_setpoint_temp is not None:
+                cam.vapor_setpoint_temp = float(vapor_setpoint_temp)
+            if vapor_setpoint_hum is not None:
+                cam.vapor_setpoint_hum = float(vapor_setpoint_hum)
+
+    MAX_CAMARAS = 12
+
+    def add_camara(self, config: Dict | None = None) -> int:
+        """Agrega una cámara nueva al final. Devuelve el nuevo id."""
+        with self.lock:
+            if len(self.camaras) >= self.MAX_CAMARAS:
+                return -1
+            i = len(self.camaras)
+            cfg = config or {
+                "nombre": f"Camara {i+1}",
+                "temperatura_objetivo": 35.0,
+                "humedad_objetivo": 75.0,
+                "co2_objetivo": 3000.0,
+            }
+            cam = CamaraMaduracion(i, cfg, self.limits)
+            self.camaras.append(cam)
+            return i
+
+    def remove_camara(self, idx: int) -> bool:
+        with self.lock:
+            if idx < 0 or idx >= len(self.camaras) or len(self.camaras) <= 1:
+                return False
+            self.camaras.pop(idx)
+            # Reindexar
+            for k, cam in enumerate(self.camaras):
+                cam.id = k
+            return True
+
+    def set_camaras_count(self, n: int) -> int:
+        """Ajusta el total a n (1..MAX_CAMARAS) agregando o removiendo desde el final."""
+        with self.lock:
+            n = max(1, min(self.MAX_CAMARAS, int(n)))
+            while len(self.camaras) < n:
+                i = len(self.camaras)
+                self.camaras.append(CamaraMaduracion(i, {
+                    "nombre": f"Camara {i+1}",
+                    "temperatura_objetivo": 35.0,
+                    "humedad_objetivo": 75.0,
+                    "co2_objetivo": 3000.0,
+                }, self.limits))
+            while len(self.camaras) > n:
+                self.camaras.pop()
+            for k, cam in enumerate(self.camaras):
+                cam.id = k
+            return len(self.camaras)
 
     def update(self):
         now = time.time()
@@ -358,6 +437,11 @@ class YerbaProcessSimulator:
                     "temperatura_obj": cam.temperatura_obj,
                     "humedad_obj": cam.humedad_obj,
                     "co2_obj": cam.co2_obj,
+                    "vapor_activo": cam.vapor_activo,
+                    "vapor_caudal_kgh": cam.vapor_caudal_kgh,
+                    "vapor_setpoint_temp": cam.vapor_setpoint_temp,
+                    "vapor_setpoint_hum": cam.vapor_setpoint_hum,
+                    "vapor_kg_acum": round(cam.vapor_kg_acum, 3),
                 }
                 for cam in self.camaras
             ],

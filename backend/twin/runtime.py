@@ -16,7 +16,9 @@ from .external_sources import (
 from .mqtt_publisher import YerbaMqttPublisher
 from .opcua_server import YerbaOpcUaServer
 from .persistence import PersistenceService
+from .replay_service import ReplayService
 from .weather import DEFAULT_LOCATION, WeatherService
+from .whatif_service import WhatIfService
 from .yerba_modbus_server import YerbaModbusServer
 from .yerba_simulator import YerbaProcessSimulator
 
@@ -63,6 +65,8 @@ class TwinRuntime:
         # Servicios asíncronos
         self.weather: WeatherService | None = None
         self.persistence: PersistenceService | None = None
+        self.replay: ReplayService | None = None
+        self.whatif: WhatIfService | None = None
 
         # Fuentes externas (modo twin/shadow)
         self.mirror = ExternalMirror()
@@ -284,6 +288,10 @@ class TwinRuntime:
         self.start_modbus()
         self.start_mqtt()
         self.start_opcua()
+        # Replay service (no arranca solo, queda listo)
+        self.replay = ReplayService(self.simulator, DATA_DIR)
+        # What-if service (orquesta escenarios paralelos)
+        self.whatif = WhatIfService(self.simulator, self)
 
     def update_config(self, patch: Dict[str, Any]) -> Dict[str, Any]:
         """Aplica cambios al config en memoria + YAML y al simulador."""

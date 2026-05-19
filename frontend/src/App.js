@@ -16,7 +16,8 @@ import RecetasView from './components/RecetasView';
 import LotesView from './components/LotesView';
 import Industria40View from './components/Industria40View';
 import OperacionesView from './components/OperacionesView';
-import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell } from '@phosphor-icons/react';
+import Fase4View from './components/Fase4View';
+import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask } from '@phosphor-icons/react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', Icon: House, role: 'any' },
@@ -28,6 +29,7 @@ const TABS = [
   { id: 'lotes', label: 'Lotes', Icon: Package, role: 'any' },
   { id: 'ops', label: 'Operaciones', Icon: ChartLineUp, role: 'any' },
   { id: 'i40', label: 'Industria 4.0', Icon: Plugs, role: 'any' },
+  { id: 'fase4', label: 'Replay & What-if', Icon: Flask, role: 'any' },
   { id: 'ia', label: 'IA · Gemini', Icon: Sparkle, role: 'any' },
   { id: 'config', label: 'Configuración', Icon: Gear, role: 'admin' },
 ];
@@ -60,8 +62,9 @@ function AuthedApp() {
 
   const toggleMode = async () => {
     if (!isAdmin(user)) return;
-    // 3-way cycle: simulator → shadow → twin → simulator
-    const next = mode === 'simulator' ? 'shadow' : mode === 'shadow' ? 'twin' : 'simulator';
+    // 3-way cycle: simulator → shadow → twin → simulator. Replay se entra desde Fase4 tab.
+    const cycle = { simulator: 'shadow', shadow: 'twin', twin: 'simulator', replay: 'simulator' };
+    const next = cycle[mode] || 'simulator';
     try {
       await api.setMode(next);
       setMode(next);
@@ -74,6 +77,7 @@ function AuthedApp() {
     simulator: { label: 'Simulador', cls: 'bg-green-500/10 text-green-400 border-green-500/30', Icon: Robot },
     shadow:    { label: 'Shadow',    cls: 'bg-blue-500/10 text-blue-300 border-blue-500/30', Icon: Cpu },
     twin:      { label: 'Gemelo',    cls: 'bg-amber-300/15 text-amber-300 border-amber-300/40', Icon: Cpu },
+    replay:    { label: 'Replay',    cls: 'bg-purple-500/15 text-purple-300 border-purple-500/40', Icon: Cpu },
   };
   const mm = modeMeta[mode] || modeMeta.simulator;
 
@@ -154,6 +158,7 @@ function AuthedApp() {
         <div style={{ display: tab === 'lotes' ? 'block' : 'none' }}><LotesView /></div>
         <div style={{ display: tab === 'ops' ? 'block' : 'none' }}><OperacionesView /></div>
         <div style={{ display: tab === 'i40' ? 'block' : 'none' }}><Industria40View /></div>
+        <div style={{ display: tab === 'fase4' ? 'block' : 'none' }}><Fase4View /></div>
         <div style={{ display: tab === 'ia' ? 'block' : 'none' }}><AIPanel /></div>
         {isAdmin(user) && (
           <div style={{ display: tab === 'config' ? 'block' : 'none' }}><ConfigView status={status} /></div>

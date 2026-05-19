@@ -41,16 +41,26 @@ class YerbaModbusServer:
 
     def _build_context(self):
         """
-        Crea 7 contextos (0..6): 0 zapecado, 1 secado, 2 canchado, 3-6 cámaras.
+        Crea contextos: 0 zapecado, 1 secado, 2 canchado, 3..14 cámaras (hasta 12),
+        20..22 escenarios what-if 1..3.
         Compatible con pymodbus <3.10 (slaves=) y >=3.10 (devices=).
         """
         contexts = {}
-        for i in range(7):
+        # Etapas + cámaras
+        for i in range(15):  # 3 etapas + 12 cámaras
             contexts[i] = _CTX_CLS(
                 di=ModbusSequentialDataBlock(0, [0] * 10),
                 co=ModbusSequentialDataBlock(0, [0] * 10),
                 hr=ModbusSequentialDataBlock(0, [0] * 64),
                 ir=ModbusSequentialDataBlock(0, [0] * 64),
+            )
+        # What-if scenarios (unit IDs 20, 21, 22)
+        for i in (20, 21, 22):
+            contexts[i] = _CTX_CLS(
+                di=ModbusSequentialDataBlock(0, [0] * 10),
+                co=ModbusSequentialDataBlock(0, [0] * 10),
+                hr=ModbusSequentialDataBlock(0, [0] * 16),
+                ir=ModbusSequentialDataBlock(0, [0] * 16),
             )
 
         # Construir ModbusServerContext usando el nombre de parámetro correcto
@@ -106,22 +116,28 @@ class YerbaModbusServer:
         except Exception:
             pass
 
-        # Unidades 3..6: Cámaras
+        # Unidades 3..14: Cámaras (hasta 12). Si hay menos, se ceran las extra.
         try:
-            for i, cam in enumerate(self.simulador.camaras):
-                if i >= 4:
-                    break
-                self.context[i + 3].setValues(3, 0, [
-                    int(cam.temperatura * 10),
-                    int(cam.humedad * 10),
-                    int(cam.co2),
-                    int(cam.temperatura_obj * 10),
-                    int(cam.humedad_obj * 10),
-                    int(cam.co2_obj),
-                    int(cam.carga_kg),
-                    int(cam.tiempo_maduracion * 100),
-                    int(getattr(cam, "ventilador", 0)),
-                ])
+            for i in range(12):
+                if i < len(self.simulador.camaras):
+                    cam = self.simulador.camaras[i]
+                    self.context[i + 3].setValues(3, 0, [
+                        int(cam.temperatura * 10),
+                        int(cam.humedad * 10),
+                        int(cam.co2),
+                        int(cam.temperatura_obj * 10),
+                        int(cam.humedad_obj * 10),
+                        int(cam.co2_obj),
+                        int(cam.carga_kg),
+                        int(cam.tiempo_maduracion * 100),
+                        int(getattr(cam, "ventilador", 0)),
+                        int(getattr(cam, "vapor_activo", 0)),
+                        int(getattr(cam, "vapor_caudal_kgh", 0) * 10),
+                        int(getattr(cam, "vapor_setpoint_temp", 0) * 10),
+                        int(getattr(cam, "vapor_setpoint_hum", 0) * 10),
+                    ])
+                else:
+                    self.context[i + 3].setValues(3, 0, [0] * 13)
         except Exception:
             pass
 

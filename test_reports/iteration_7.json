@@ -1,0 +1,40 @@
+{
+  "summary": "FASE 4 (Replay + What-if + chambers count + steam injection) tested end-to-end. Fixed a route-ordering bug where POST /api/whatif/reset was matched by /api/whatif/{scenario_id}. All 16 backend pytest cases pass after fix. Frontend tabs, subtabs, file dropdown, count +/- control and steam testids verified.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "POST /api/whatif/reset", "issue": "Was being shadowed by /api/whatif/{scenario_id} (returned 422). FIXED by moving /whatif/reset above /whatif/{scenario_id} in server.py (same pattern already used for /camaras/count)."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "Cámaras detail card", "issues": ["In SVG mimic mode, TEMP and HR numeric values in the mimic box appear blank/cut (only unit symbol shown), while the bottom KPI strip shows them correctly (42.0°C / 85%). Likely a text fill / svg <text> sizing regression — not blocking but worth a look."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_fase4_replay_whatif.py",
+    "/app/test_reports/pytest/iteration_7_fase4.xml"
+  ],
+  "action_items": [
+    "Verify the route fix on server.py for /whatif/reset (already applied by test agent, hot-reloaded).",
+    "Investigate SVG camera mimic: TEMP/HR numbers not visible inside the mimic frame (CSS color or text-anchor regression?). Bottom KPI strip is fine."
+  ],
+  "critical_code_review_comments": [
+    "whatif_service.py L234: `if unit in self.runtime.modbus.context.slaves() if hasattr(...) else True` is a confusing inline conditional — should be parenthesized for clarity.",
+    "whatif_service.py L216: `from .. import server  # noqa` imports server but never reads ops_service prices — dead import; prices remain hardcoded (120/95) instead of live ops prices.",
+    "replay_service.py: thread is daemon but stop_locked() doesn't join — starting a new replay before old loop exits is mitigated only by self.active flag; consider join with short timeout to avoid two threads briefly writing the simulator.",
+    "server.py grew >1000 lines — consider splitting Fase4 routes into a separate router module."
+  ],
+  "updated_files": [
+    "/app/backend/server.py (moved /whatif/reset before /whatif/{scenario_id})",
+    "/app/backend/tests/test_fase4_replay_whatif.py (new)"
+  ],
+  "success_rate": {"backend": "100% (16/16)", "frontend": "100% on smoke (tabs, subtabs, count +/-, steam fields, replay file list)"},
+  "test_credentials": "admin/admin, operario/operario (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "None. Used preexisting yerba_history_2026-05-18.csv & yerba_history_2026-05-19.csv. What-if scenarios cleaned up via /whatif/reset.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "FASE 4 backend fully green. Frontend Replay & What-if tab works, file dropdown populated. The /whatif/reset route fix is critical — keep it ordered before /whatif/{scenario_id}. Regression checks for /energy, /oee, /recipes, /alarms/active still pass."
+}
