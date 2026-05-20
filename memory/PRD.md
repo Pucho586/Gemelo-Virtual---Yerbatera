@@ -1,67 +1,74 @@
 # PRD — Gemelo Digital Yerba Mate
 
 ## Problema original
-Aplicación Python/Tkinter que simula la producción de Yerba Mate con protocolos
-industriales (Modbus TCP, MQTT, OPC UA). Migrar a un stack web (React + FastAPI)
-manteniendo los protocolos y agregando IA (Gemini), clima real (Open-Meteo) y
-funcionalidad industrial avanzada (recetas, batches, alarmas ISA-18.2, OEE,
-mantenimiento, reportes PDF, replay, what-if, mass-flow realista).
+Migrar app Python/Tkinter de simulación de Yerba Mate a web (React + FastAPI)
+con protocolos industriales (Modbus, MQTT, OPC UA), IA (Gemini), clima real
+(Open-Meteo) y funcionalidad industrial completa.
 
-## Fases del roadmap
-- Fase 1 ✅ Recetas, Batches, Mass-Flow básico, SVG Mimics, Auth JWT
-- Fase 2 ✅ Clientes Modbus/OPC UA, drift calibration, CSV calibration
-- Fase 3 ✅ Alarmas ISA-18.2, OEE, Mantenimiento, PDF mensual, costos energéticos
-- Fase 4 ✅ Replay desde CSVs, What-If, Mass-flow con inheritance T/H + readiness
-- **Fase 5 (mayo 2026) ✅ Rediseño físico puro + PID configurable + forecast horario**
+## Estado (mayo 2026) — Fase 6 BIDIRECCIONAL
 
-## Estado actual (Iteración 10 — modelo físico puro)
-### Simulador
-- **Modelo físico real** (sin τ→SP escondido): balance energético/másico por etapa.
-- **Variables manipuladas** por etapa (lo que el operador o PLC ajusta):
-  - Zapecado: `vel.chip` (kg/h), `vel.tambor` (rpm)
-  - Secado: `posicion_calefactor` (0-100%), `vel.aire` (m/s)
-  - Canchado: `vel.molino` (rpm)
-  - Cámaras: `vapor_caudal_kgh`, `vent_pos`, `vapor_activo`
-- **SPs** (objetivos del operador) — sólo referencia, no fuerzan al sistema.
-- **PID interno opcional por etapa** (default OFF) con Kp/Ki/Kd tunables y reset.
-- **Open-Meteo forecast horario** (96h) consumido cuando aceleración > 1×.
-- **Reloj simulado** que avanza con factor aceleración (1× / 60× / 1h-s / 1d-s).
-- 8 fallas (quemador, motor tambor, ventilador, serpentín, motor molino,
-  rodamiento caliente, fuga vapor, puerta abierta).
+### Características core
+- **Modelo físico puro** (sin τ→SP escondido). Balance energético/másico real.
+- **PID interno opcional** por etapa (Kp/Ki/Kd tunable, default OFF).
+- **Variables manipuladas** explícitas: vel.chip, vel.tambor, posición calefactor, vel.aire, caudal vapor, rpm, vent.pos.
+- **Forecast horario** Open-Meteo (96h) usado cuando aceleración > 1×.
+- **Reloj simulado** que avanza con factor configurable (1× / 60× / 1h-s / 1d-s).
+- **8 inyecciones de falla** por etapa.
 
-### Protocolos expuestos
-- **Modbus TCP (5020)**: regs 0..16 por unidad (incluye PID y manipuladas reales),
-  coils para fallas, unidad 100 globales.
-- **OPC UA (4840)**: `YerbaProcess.{Zapecado, Secado, Canchado, Camara1..12, Simulacion}` con PIDs.
-- **MQTT**: topics `yerba/{zapecado,secado,canchado,camara_N,ambient,sim,forecast}`
-  con PV + SP + manipuladas + PID + faults cada 5s.
+### Modo BIDIRECCIONAL (todos los protocolos)
+- **MQTT** subscriber `yerba/cmd/#` parsea comandos JSON y los aplica al simulator.
+  - `yerba/cmd/{etapa}` con JSON payload (cualquier campo del Patch model)
+  - `yerba/cmd/camara/<idx>` para una cámara específica
+  - `yerba/cmd/weather` para override manual del ambient
+  - `yerba/cmd/sim` para globales (acel, throughput, mode)
+  - Atajo raw value: `yerba/cmd/zapecado/velocidad_chip` payload `45`
+- **Modbus TCP** (`_apply_external_writes` polling-diff cada 200ms).
+- **OPC UA** (`_apply_external_writes` cada 2s).
+- Manual override del clima persistente (no es pisado por forecast cuando
+  `weather_meta.source ∈ {manual, mqtt-cmd}`).
+
+### Documentación
+- `manual_operaciones.md` — flujo operativo desde la UI.
+- `manual_tecnico.md` — arquitectura, modelo físico, mapeo Modbus/OPC UA, MQTT, modo bidireccional.
+- `instructivo_nodered.md` — integración Node-RED, cámaras remotas, ejemplos de flow, troubleshooting.
+
+### Protocolos
+| Proto | Puerto | Latencia in | Latencia out | Modo |
+|-------|--------|-------------|--------------|------|
+| MQTT  | broker | <100 ms | 5 s | Bidir |
+| Modbus TCP | 5020 | ~200 ms | ~200 ms | Bidir |
+| OPC UA | 4840 | ~2 s | ~2 s | Bidir |
+| REST | /api/* | on-demand | on-demand | Bidir |
 
 ### Frontend
-- 13 tabs operativas con mímicos SVG/P&ID, charts, sensores derivados.
-- **PidPanel** reutilizable: toggle AUTO/MANUAL, Kp/Ki/Kd, Out, Σerr, reset.
-- **SpeedControl** + **WeatherControl** en header.
-- Layout 2 columnas en cámaras (mímico + reales vs SP a izq, controles a der).
-- `useLocalSync` hook que evita race condition de toggles.
-- Manuales markdown integrados (operaciones + técnico).
+- 13 tabs operativas, mímicos SVG/P&ID, sensores derivados.
+- PidPanel, FaultPanel, SpeedControl, WeatherControl.
+- useLocalSync hook (anti race condition).
+- Tour interactivo, DocsModal markdown viewer.
+- Theme dark global con textarea fix CSS.
 
 ## Tests
-- 14/15 tests nuevos en iteración 10 pasan + 4/4 regression OK.
-- Tests pre-existentes (`test_data_excel`, `test_zapecado_to_secado_with_merma`)
-  fallan por motivos previos a esta refactorización.
+- Iteración 11: 13/15 bidir tests pass (los 2 fallos fueron causa root del bug
+  weather override, ya fixeado).
+- 8 docs/test_reports historicos.
 
 ## Credenciales
 - admin / admin
 - operario / operario
 
-## Backlog priorizado
-- **P1**: Agregar "Molienda fina" y "Empaque" como etapas finales del Mass Flow.
-- **P2**: Reportes PDF por batch individual.
-- **P2**: Refactor `server.py` (1214+ líneas) en routers por dominio.
-- **P3**: Unificar acción inversa de PID (Canchado usa kp<0 vs direct_action=False).
-- **P3**: Exponer factor de acople zapecado→secado humidity como parámetro.
+## Modos del simulador
+- `simulator` (default): física pura controlada desde UI/API.
+- `shadow`: refleja lecturas externas sin recalcular física.
+- `twin`: simula y compara vs planta real, emite correcciones.
 
-## Health check (mayo 2026)
-- Open-Meteo rate-limited (forecast_count puede ser 0; manual override disponible).
-- Default ambient: 24°C / 70% (Posadas, Misiones).
-- Zapecado T estable @ defaults: ~350-380°C (calibrado).
-- Secado T sin calefactor: cae al ambiente (correcto — sin PID escondido).
+## Backlog priorizado
+- **P1**: "Molienda fina" y "Empaque" en Mass Flow (etapas finales).
+- **P2**: Reportes PDF por batch individual.
+- **P2**: Refactor `server.py` (1233 líneas) → routers por dominio.
+- **P3**: ACL MQTT por topic + OPC UA con seguridad Sign+Encrypt.
+- **P3**: Replay desde stream MQTT real (grabar/reproducir planta).
+
+## Notas
+- Open-Meteo tiene rate limit. Fallback estacional sintético implementado.
+- Para tests de MQTT en CI: instalar mosquitto `apt-get install -y mosquitto`.
+- OPC UA: nodos están bajo `Objects/{Zapecado,Secado,Canchado,Camara1..12,Simulacion}` namespace=2.

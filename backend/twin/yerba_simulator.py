@@ -185,12 +185,16 @@ class Secado:
 
     def update(self, dt: float, ambient_temp: float, ambient_humidity: float):
         if self.pid_t.enabled:
-            self.pid_t.sp = self.temperatura_obj
+            # Si el sp del PID no fue seteado explícitamente, usar el temperatura_obj de la etapa.
+            # Si el sp está fijado != temperatura_obj, respetar el sp del PID.
+            if self.pid_t.sp == 0 or abs(self.pid_t.sp - self.temperatura_obj) < 0.001:
+                self.pid_t.sp = self.temperatura_obj
             out = self.pid_t.step(self.temperatura, dt)
             if out is not None:
                 self.posicion_calefactor = max(0.0, min(100.0, out))
         if self.pid_h.enabled:
-            self.pid_h.sp = self.humedad_obj
+            if self.pid_h.sp == 0 or abs(self.pid_h.sp - self.humedad_obj) < 0.001:
+                self.pid_h.sp = self.humedad_obj
             out = self.pid_h.step(self.humedad, dt)
             if out is not None:
                 self.velocidad_aire = max(0.0, min(15.0, out))
@@ -651,9 +655,12 @@ class YerbaProcessSimulator:
         self.last_update = now
         dt = dt_real * self.aceleracion
 
-        # Si hay forecast y aceleración > 1, usar pronóstico para ambient
-        amb_t, amb_h = self._ambient_for_sim_time()
-        if self.aceleracion > 1.0 and self.forecast_hourly:
+        # Si hay forecast y aceleración > 1, usar pronóstico para ambient.
+        # EXCEPCIÓN: si el clima fue forzado por el operador (manual/mqtt-cmd),
+        # respetar ese override y NO sobreescribir con el forecast.
+        forced_source = self.weather_meta.get("source") in ("manual", "mqtt-cmd")
+        if not forced_source and self.aceleracion > 1.0 and self.forecast_hourly:
+            amb_t, amb_h = self._ambient_for_sim_time()
             self.ambient_temp = amb_t
             self.ambient_humidity = amb_h
 
