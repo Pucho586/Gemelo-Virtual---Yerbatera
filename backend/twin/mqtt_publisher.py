@@ -11,10 +11,26 @@ Topics (todos JSON):
 import json
 import time
 import threading
+import logging
 import paho.mqtt.client as mqtt
+
+logger = logging.getLogger(__name__)
 
 
 class YerbaMqttPublisher:
+    """Publica el estado del simulador + se suscribe a comandos externos.
+
+    Topics de comando (bidireccional):
+      yerba/cmd/zapecado     payload: {velocidad_chip:50, temperatura_obj:480, pid:{enabled:true,kp:0.2}}
+      yerba/cmd/secado       payload: {posicion_calefactor:75, pid_t:{enabled:true,sp:95}}
+      yerba/cmd/canchado     payload: {velocidad_molino:80, falla_motor:true}
+      yerba/cmd/camara/0     payload: {vapor_caudal_kgh:30, vapor_activo:true}
+      yerba/cmd/weather      payload: {temperature:18,humidity:75}  (override manual)
+      yerba/cmd/sim          payload: {aceleracion:3600, throughput_kgh:1200}
+
+    Cualquier campo del Patch correspondiente es aceptado. Útil para Node-RED.
+    """
+
     def __init__(self, simulador, config):
         self.simulador = simulador
         self.broker = config.get('broker', 'localhost')
@@ -25,16 +41,85 @@ class YerbaMqttPublisher:
         self.interval = config.get('interval', 5)
         self.keepalive = config.get('keepalive', 60)
         self.client = mqtt.Client()
+        self.client.on_message = self._on_message
         if self.username:
             self.client.username_pw_set(self.username, self.password)
 
     def start(self):
         try:
             self.client.connect(self.broker, self.port, keepalive=self.keepalive)
+            # Suscribirse a topics de comando (bidireccional)
+            cmd_topic = f"{self.topic_base}/cmd/#"
+            self.client.subscribe(cmd_topic, qos=0)
+            self.client.loop_start()
             threading.Thread(target=self._publish_loop, daemon=True).start()
-            print("MQTT Publisher conectado a:", self.broker)
+            logger.info(f"MQTT conectado a {self.broker}:{self.port} · publica '{self.topic_base}/*' · escucha '{cmd_topic}'")
         except Exception as e:
-            print("Error al conectar al broker MQTT:", e)
+            logger.error(f"Error al conectar al broker MQTT: {e}")
+
+    # ---- BIDIRECCIONAL: handler de comandos entrantes ----
+    def _on_message(self, client, userdata, msg):
+        try:
+            payload = json.loads(msg.payload.decode("utf-8") or "{}")
+        except Exception:
+            try:
+                # permitir número crudo: yerba/cmd/zapecado/velocidad_chip "50"
+                payload_raw = msg.payload.decode("utf-8").strip()
+                payload = float(payload_raw) if payload_raw and payload_raw[0] in "0123456789-." else payload_raw
+            except Exception:
+                logger.warning(f"MQTT payload no parseable: topic={msg.topic} payload={msg.payload!r}")
+                return
+
+        parts = msg.topic.split("/")
+        # Espera: yerba/cmd/<destino>[/<idx_o_campo>][/<campo>]
+        if len(parts) < 3 or parts[1] != "cmd":
+            return
+        dest = parts[2]
+        sub = parts[3] if len(parts) > 3 else None
+        field = parts[4] if len(parts) > 4 else None
+
+        # Si payload es un valor crudo + campo en topic, armar dict
+        if field and not isinstance(payload, dict):
+            payload = {field: payload}
+        elif sub and not isinstance(payload, dict) and dest in ("zapecado", "secado", "canchado", "weather", "sim"):
+            payload = {sub: payload}
+
+        if not isinstance(payload, dict):
+            logger.warning(f"MQTT cmd ignored, payload no es dict: {msg.topic} → {payload}")
+            return
+
+        try:
+            if dest == "zapecado":
+                self.simulador.set_zapecado(**payload)
+            elif dest == "secado":
+                self.simulador.set_secado(**payload)
+            elif dest == "canchado":
+                self.simulador.set_canchado(**payload)
+            elif dest == "camara":
+                # yerba/cmd/camara/<idx> payload={field:value}
+                idx = int(sub) if sub is not None and sub.isdigit() else None
+                if idx is not None:
+                    self.simulador.set_camara(idx, **payload)
+            elif dest == "weather":
+                t = payload.get("temperature")
+                h = payload.get("humidity")
+                if t is not None and h is not None:
+                    from datetime import datetime, timezone
+                    self.simulador.set_weather(float(t), float(h), {
+                        "city": self.simulador.weather_meta.get("city", "MQTT"),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                        "source": "mqtt-cmd",
+                    })
+            elif dest == "sim":
+                if "aceleracion" in payload:
+                    self.simulador.aceleracion = float(payload["aceleracion"])
+                if "throughput_kgh" in payload:
+                    self.simulador.throughput_kgh = float(payload["throughput_kgh"])
+                if "mode" in payload:
+                    self.simulador.mode = str(payload["mode"])
+            logger.info(f"MQTT cmd OK: {msg.topic} → {payload}")
+        except Exception as e:
+            logger.error(f"MQTT cmd error {msg.topic}: {e}")
 
     def _publish_loop(self):
         while True:
@@ -47,7 +132,7 @@ class YerbaMqttPublisher:
                 self._publicar_sim()
                 self._publicar_forecast()
             except Exception as e:
-                print("Error publicando MQTT:", e)
+                logger.error(f"Error publicando MQTT: {e}")
             time.sleep(self.interval)
 
     def _pub(self, topic, payload):

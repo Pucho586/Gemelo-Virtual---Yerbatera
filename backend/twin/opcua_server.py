@@ -139,9 +139,94 @@ class YerbaOpcUaServer:
                 except Exception:
                     pass
 
+    def _apply_external_writes(self):
+        """Detecta escrituras externas (PLC/Node-RED) y aplica al simulador.
+
+        Patrón polling-diff: comparamos el valor actual del nodo OPC UA con lo
+        que nosotros escribimos por última vez. Si difiere, fue un cliente
+        externo → forwardeamos al simulador. Esto permite que un PLC real
+        controle el gemelo escribiendo a TemperaturaObjetivo, FallaQuemador, etc.
+        """
+        # Inicializar cache la primera vez
+        if not hasattr(self, "_last_writes"):
+            self._last_writes = {}
+        cache = self._last_writes
+
+        def diff_apply(key, current, applier):
+            prev = cache.get(key)
+            if prev is None:
+                cache[key] = current
+                return
+            # Tolerancia para floats
+            if isinstance(current, (int, float)) and isinstance(prev, (int, float)):
+                if abs(float(current) - float(prev)) < 0.01:
+                    return
+            elif current == prev:
+                return
+            # Cambio externo detectado
+            try:
+                applier(current)
+            except Exception:
+                pass
+            # NO actualizamos cache aquí — se actualiza al final cuando reescribimos
+
+        try:
+            # Zapecado
+            t_obj = self.zap_temp_obj.get_value()
+            diff_apply("zap_temp_obj", t_obj,
+                lambda v: self.simulador.set_zapecado(temperatura_obj=(None if v == 0 else float(v))))
+            diff_apply("zap_falla_q", self.zap_falla_quemador.get_value(),
+                lambda v: self.simulador.set_zapecado(falla_quemador=bool(v)))
+            diff_apply("zap_falla_m", self.zap_falla_motor.get_value(),
+                lambda v: self.simulador.set_zapecado(falla_motor_tambor=bool(v)))
+            # Secado
+            diff_apply("sec_temp_obj", self.sec_temp_obj.get_value(),
+                lambda v: self.simulador.set_secado(temperatura_obj=float(v)))
+            diff_apply("sec_hum_obj", self.sec_hum_obj.get_value(),
+                lambda v: self.simulador.set_secado(humedad_obj=float(v)))
+            diff_apply("sec_falla_v", self.sec_falla_vent.get_value(),
+                lambda v: self.simulador.set_secado(falla_ventilador=bool(v)))
+            diff_apply("sec_falla_s", self.sec_falla_serp.get_value(),
+                lambda v: self.simulador.set_secado(falla_serpentin=bool(v)))
+            # Canchado
+            diff_apply("can_part_obj", self.can_part_obj.get_value(),
+                lambda v: self.simulador.set_canchado(tamano_particula_obj=(None if v == 0 else float(v))))
+            diff_apply("can_falla_m", self.can_falla_motor.get_value(),
+                lambda v: self.simulador.set_canchado(falla_motor=bool(v)))
+            diff_apply("can_rod", self.can_rod_caliente.get_value(),
+                lambda v: self.simulador.set_canchado(rodamiento_caliente=bool(v)))
+            # Globales
+            diff_apply("sim_acel", self.glb_acel.get_value(),
+                lambda v: setattr(self.simulador, "aceleracion", float(v)))
+            diff_apply("sim_throughput", self.glb_throughput.get_value(),
+                lambda v: setattr(self.simulador, "throughput_kgh", float(v)))
+            # Cámaras (sólo SPs + fallas, no carga)
+            for i, nodes in enumerate(self.camaras):
+                if i >= len(self.simulador.camaras): continue
+                (t, h, co, d, tobj, hobj, va, vc, vst, vsh, vka, tau, fv, fg, pa, act) = nodes
+                diff_apply(f"cam{i}_t_obj", tobj.get_value(),
+                    lambda v, ii=i: self.simulador.set_camara(ii, temperatura_obj=float(v)))
+                diff_apply(f"cam{i}_h_obj", hobj.get_value(),
+                    lambda v, ii=i: self.simulador.set_camara(ii, humedad_obj=float(v)))
+                diff_apply(f"cam{i}_vapor_act", va.get_value(),
+                    lambda v, ii=i: self.simulador.set_camara(ii, vapor_activo=bool(v)))
+                diff_apply(f"cam{i}_vapor_kgh", vc.get_value(),
+                    lambda v, ii=i: self.simulador.set_camara(ii, vapor_caudal_kgh=float(v)))
+                diff_apply(f"cam{i}_falla_v", fv.get_value(),
+                    lambda v, ii=i: self.simulador.set_camara(ii, falla_ventilador=bool(v)))
+                diff_apply(f"cam{i}_fuga", fg.get_value(),
+                    lambda v, ii=i: self.simulador.set_camara(ii, fuga_vapor=bool(v)))
+                diff_apply(f"cam{i}_puerta", pa.get_value(),
+                    lambda v, ii=i: self.simulador.set_camara(ii, puerta_abierta=bool(v)))
+        except Exception:
+            pass
+
     def _update_loop(self):
         while True:
             try:
+                # PASO 1: detectar escrituras externas (PLC/Node-RED → simulador)
+                self._apply_external_writes()
+                # PASO 2: publicar estado actualizado del simulador (→ clientes)
                 z = self.simulador.zapecado
                 s = self.simulador.secado
                 c = self.simulador.canchado
@@ -167,6 +252,21 @@ class YerbaOpcUaServer:
                 self.glb_throughput.set_value(float(self.simulador.throughput_kgh))
                 self.glb_modo.set_value(str(self.simulador.mode))
 
+                # PASO 3: actualizar cache de "last written" con los valores recién publicados
+                lw = self._last_writes
+                lw["zap_temp_obj"] = float(z.temperatura_obj if z.temperatura_obj is not None else 0.0)
+                lw["zap_falla_q"] = bool(z.falla_quemador)
+                lw["zap_falla_m"] = bool(z.falla_motor_tambor)
+                lw["sec_temp_obj"] = float(s.temperatura_obj)
+                lw["sec_hum_obj"] = float(s.humedad_obj)
+                lw["sec_falla_v"] = bool(s.falla_ventilador)
+                lw["sec_falla_s"] = bool(s.falla_serpentin)
+                lw["can_part_obj"] = float(c.tamano_particula_obj if c.tamano_particula_obj is not None else 0.0)
+                lw["can_falla_m"] = bool(c.falla_motor)
+                lw["can_rod"] = bool(c.rodamiento_caliente)
+                lw["sim_acel"] = float(self.simulador.aceleracion)
+                lw["sim_throughput"] = float(self.simulador.throughput_kgh)
+
                 n_real = len(self.simulador.camaras)
                 for i, nodes in enumerate(self.camaras):
                     (t, h, co, d, tobj, hobj, va, vc, vst, vsh, vka, tau, fv, fg, pa, act) = nodes
@@ -188,6 +288,13 @@ class YerbaOpcUaServer:
                         fg.set_value(bool(cam.fuga_vapor))
                         pa.set_value(bool(cam.puerta_abierta))
                         act.set_value(True)
+                        lw[f"cam{i}_t_obj"] = float(cam.temperatura_obj)
+                        lw[f"cam{i}_h_obj"] = float(cam.humedad_obj)
+                        lw[f"cam{i}_vapor_act"] = bool(cam.vapor_activo)
+                        lw[f"cam{i}_vapor_kgh"] = float(cam.vapor_caudal_kgh)
+                        lw[f"cam{i}_falla_v"] = bool(cam.falla_ventilador)
+                        lw[f"cam{i}_fuga"] = bool(cam.fuga_vapor)
+                        lw[f"cam{i}_puerta"] = bool(cam.puerta_abierta)
                     else:
                         act.set_value(False)
             except Exception:

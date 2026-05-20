@@ -61,7 +61,7 @@ secado:
   temperatura: 90
   velocidad_aire: 2.5
 simulacion:
-  aceleracion: 60.0
+  aceleracion: 3600
   mode: simulator
   throughput_kgh: 800
 zapecado:

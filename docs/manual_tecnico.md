@@ -649,8 +649,9 @@ forecast horario de Open-Meteo (`hourly=temperature_2m,relative_humidity_2m`,
 
 Si Open-Meteo está caído, se puede forzar manual via `POST /api/weather/manual {temperature, humidity}`.
 
-### 5.7 Tópicos MQTT (publicación cada 5s)
+### 5.7 Tópicos MQTT (publicación cada 5s + escucha bidireccional)
 
+**Publicación (gemelo → broker)**:
 ```
 yerba/zapecado       → {pv_temperatura, sp_temperatura, manipuladas, pid, faults}
 yerba/secado         → {pv_temperatura, pv_humedad, sp_*, manipuladas, pid_t, pid_h, faults}
@@ -660,6 +661,39 @@ yerba/ambient        → {temperatura, humedad, city, source, ...}
 yerba/sim            → {aceleracion, throughput_kgh, mode, sim_clock}
 yerba/forecast       → {hourly_next_24h: [{time, temp, hum}, ...]}
 ```
+
+**Suscripción (broker → gemelo, modo bidireccional)**:
+```
+yerba/cmd/zapecado            ← payload: cualquier campo del ZapecadoPatch
+yerba/cmd/secado              ← payload: SecadoPatch
+yerba/cmd/canchado            ← payload: CanchadoPatch
+yerba/cmd/camara/<idx>        ← payload: CamaraPatch
+yerba/cmd/weather             ← {temperature, humidity}
+yerba/cmd/sim                 ← {aceleracion, throughput_kgh, mode}
+yerba/cmd/<dest>/<field>      ← payload crudo (atajo): número o string suelto
+```
+
+### 5.8 Modo bidireccional (PLC/Node-RED escribe → simulador responde)
+
+**Todos los servidores (MQTT, Modbus, OPC UA) soportan escrituras externas.**
+El gemelo detecta el cambio en el próximo ciclo (≈100-200 ms para MQTT y
+Modbus, 2 s para OPC UA) y aplica al simulador como si hubiera venido de
+`/api/{etapa}`.
+
+**Implementación** (`_apply_external_writes`):
+1. Al inicio de cada ciclo, leer el valor actual del registro/coil/nodo.
+2. Comparar con el cache `_last_writes` (lo que NOSOTROS escribimos antes).
+3. Si difiere → un cliente externo lo cambió → llamar al setter del simulador.
+4. Al final del ciclo, publicar el nuevo estado y actualizar el cache.
+
+**Implicancia**: si el cliente externo escribe pero el simulador en
+modo `simulator` recalcula y sobrescribe, los valores en pantalla parecerán
+"oscilar". Para tener control completo desde afuera, poner `simulator.mode =
+"shadow"` (recibe pero no recalcula la física) — ideal para integrar planta
+real.
+
+Para más detalle de cómo integrar Node-RED + cámaras remotas en tiempo real,
+ver el documento `instructivo_nodered.md` (acceso desde la UI del gemelo).
 
 ### 5.4 Recetas
 - `GET /recipes`
