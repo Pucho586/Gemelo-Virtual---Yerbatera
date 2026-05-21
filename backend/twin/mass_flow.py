@@ -43,6 +43,8 @@ DEFAULT_MERMA = {
     "secado": 0.22,          # 25% → 6% (evaporación)
     "canchado": 0.04,        # polvo y partículas finas que se pierden
     "estacionamiento": 0.005,  # mínima, sólo respiración yerba
+    "molienda_fina": 0.03,   # separa palitos del polvo + finos retenidos en zarandas
+    "empaque": 0.005,        # descarte por paquetes mal sellados / control de calidad
 }
 
 # Tiempo mínimo de procesamiento real (segundos) antes de poder transferir.
@@ -55,9 +57,11 @@ DEFAULT_MIN_TIME_S = {
     "secado": 60,             # 3-8h reales son muchos minutos en acelerado; 60s mínimo
     "canchado": 10,           # molienda rápida
     "estacionamiento": 0,     # cargado a cámara, ya está
+    "molienda_fina": 15,      # zarandeo + clasificado + control granulometría
+    "empaque": 8,             # pesado, sellado, etiquetado
 }
 
-STAGES_ORDER = ["recepcion", "zapecado", "secado", "canchado", "estacionamiento"]
+STAGES_ORDER = ["recepcion", "zapecado", "secado", "canchado", "estacionamiento", "molienda_fina", "empaque"]
 
 
 class StageMass:
@@ -247,6 +251,19 @@ class MassFlowService:
         elif stage == "canchado":
             # No hay cambio térmico significativo en canchado; T y H heredan del secado
             return (sim.secado.temperatura - 5.0, sim.secado.humedad)
+        elif stage == "estacionamiento":
+            # Promedio de cámaras con carga; si no hay, usa ambiente + HR de secado.
+            cams_con_carga = [c for c in sim.camaras if c.carga_kg > 0]
+            if cams_con_carga:
+                T = sum(c.temperatura for c in cams_con_carga) / len(cams_con_carga)
+                H = sum(c.humedad for c in cams_con_carga) / len(cams_con_carga)
+                # La yerba toma humedad de la cámara pero no es la HR del aire — clamp 6-9%
+                return (T, max(6.0, min(9.0, sim.secado.humedad + (H - 75.0) * 0.02)))
+            return (sim.ambient_temp + 5.0, sim.secado.humedad)
+        elif stage == "molienda_fina":
+            # Salida de molienda fina: ambiente + leve calentamiento por fricción.
+            # HR final del producto se asume estable post-estacionamiento.
+            return (sim.ambient_temp + 3.0, max(6.0, min(8.0, sim.secado.humedad)))
         return (sim.ambient_temp, 50.0)
 
     # ---------- Snapshot ----------

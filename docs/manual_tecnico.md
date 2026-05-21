@@ -1,9 +1,32 @@
 # Manual Técnico — Gemelo Digital Yerbatera
 
-**Versión:** v2.3 (Fase 3)
+**Versión:** v2.4 (mayo 2026)
 **Stack:** React 18 + FastAPI + MongoDB
 **Origen:** Migración del Tkinter original (https://github.com/Pucho586/Gemelo-Virtual---Yerbatera)
 **Audiencia:** Desarrollador, integrador, ingeniero de instrumentación, equipo de mantenimiento de TI.
+
+> 💡 Para arrancar rápido leé primero [`01_instructivo_ejecucion.md`](01_instructivo_ejecucion.md). Para integración con PLC/Node-RED hay un instructivo dedicado en [`instructivo_nodered.md`](instructivo_nodered.md) y la guía bidireccional en [`manual_gemelo_virtual.md`](manual_gemelo_virtual.md).
+
+---
+
+## Tabla de contenidos
+
+1. [Arquitectura general](#1-arquitectura-general)
+2. [Layout de carpetas y archivos clave](#2-layout-de-carpetas-y-archivos-clave)
+3. [Modelo físico puro (balance masa/energía)](#3-modelo-físico-puro-balance-masaenergía)
+4. [PID interno togglable](#4-pid-interno-togglable)
+5. [Mass flow service · trazabilidad por etapa](#5-mass-flow-service--trazabilidad-por-etapa)
+6. [Mapeo Modbus / OPC UA / MQTT (bidireccional)](#6-mapeo-modbus--opc-ua--mqtt-bidireccional)
+7. [Servicios externos: clima + AI](#7-servicios-externos-clima--ai)
+8. [Persistencia y reportes](#8-persistencia-y-reportes)
+9. [Alarmas ISA-18.2](#9-alarmas-isa-182)
+10. [Operaciones · OEE · costos](#10-operaciones--oee--costos)
+11. [Seguridad (JWT, recovery, ACL futuras)](#11-seguridad-jwt-recovery-acl-futuras)
+12. [Replay & What-If](#12-replay--what-if)
+13. [Testing (pytest, smoke, agent)](#13-testing-pytest-smoke-agent)
+14. [Troubleshooting](#14-troubleshooting)
+
+> Los capítulos exactos pueden variar; este TOC es una referencia. Usá el buscador del modal (Ctrl-F).
 
 ---
 

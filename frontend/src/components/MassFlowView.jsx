@@ -10,6 +10,8 @@ const STAGE_INFO = {
   secado: { label: 'Secado', desc: 'Reducción a 4-7% humedad (80-120°C, 3-8h)', color: '#FBBF24' },
   canchado: { label: 'Canchado', desc: 'Molienda gruesa (1-3 cm)', color: '#93C5FD' },
   estacionamiento: { label: 'Estacionamiento', desc: 'Maduración 6-24 meses o acelerada con vapor', color: '#C4B5FD' },
+  molienda_fina: { label: 'Molienda fina', desc: 'Zarandeo: separa hojas y palitos (granulometría INYM)', color: '#F0ABFC' },
+  empaque: { label: 'Empaque', desc: 'Pesado, sellado y etiquetado (500g / 1kg)', color: '#FDA4AF' },
 };
 
 export default function MassFlowView() {
@@ -63,7 +65,7 @@ export default function MassFlowView() {
 
   if (!data) return <div className="p-10 text-slate-500 font-mono">Cargando flujo de masa...</div>;
 
-  const order = data.order || ['recepcion', 'zapecado', 'secado', 'canchado', 'estacionamiento'];
+  const order = data.order || ['recepcion', 'zapecado', 'secado', 'canchado', 'estacionamiento', 'molienda_fina', 'empaque'];
 
   return (
     <div className="space-y-px">

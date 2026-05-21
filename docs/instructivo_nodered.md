@@ -2,6 +2,22 @@
 
 > Versión: mayo 2026 · Aplica a la versión BIDIRECCIONAL del Gemelo Digital de Yerba Mate
 
+> 💡 Si todavía no conocés los modos del gemelo (simulator / shadow / twin) leé primero [`manual_gemelo_virtual.md`](manual_gemelo_virtual.md) capítulos 2-5.
+
+---
+
+## Tabla de contenidos
+
+1. [Resumen](#1-resumen)
+2. [Arquitectura propuesta](#2-arquitectura-propuesta)
+3. [Configuración del broker MQTT](#3-configuración-del-broker-mqtt)
+4. [Configurar el gemelo para publicar y suscribirse](#4-configurar-el-gemelo-para-publicar-y-suscribirse)
+5. [Flow Node-RED de ejemplo (cámara remota)](#5-flow-node-red-de-ejemplo-cámara-remota)
+6. [Comandos de control bidireccional desde Node-RED](#6-comandos-de-control-bidireccional-desde-node-red)
+7. [Verificación end-to-end](#7-verificación-end-to-end)
+8. [Troubleshooting](#8-troubleshooting)
+9. [FAQ](#9-faq)
+
 ---
 
 ## 1. Resumen

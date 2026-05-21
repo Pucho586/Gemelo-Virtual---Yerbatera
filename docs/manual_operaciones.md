@@ -1,8 +1,28 @@
 # Manual de Operaciones — Gemelo Digital Yerbatera
 
-**Versión:** v2.3 (Fase 3 — Operaciones)
+**Versión:** v2.4 (mayo 2026)
 **Idioma:** Español
 **Destinatario:** Operario de planta, supervisor de turno, jefe de producción.
+
+> 💡 ¿Primera vez? Empezá por [`01_instructivo_ejecucion.md`](01_instructivo_ejecucion.md) para levantar el sistema y después volvé acá. Para entender qué es un gemelo y los modos paralelos con MQTT/Modbus, leé [`manual_gemelo_virtual.md`](manual_gemelo_virtual.md).
+
+---
+
+## Tabla de contenidos
+
+1. [Introducción](#1-introducción)
+2. [Acceso al sistema](#2-acceso-al-sistema)
+3. [Pantallas principales](#3-pantallas-principales)
+4. [Trazabilidad de masa (cargar lote y avanzar etapas)](#4-trazabilidad-de-masa-cargar-lote-y-avanzar-etapas)
+5. [Recetas, lotes y reportes PDF](#5-recetas-lotes-y-reportes-pdf)
+6. [Alarmas (ISA-18.2)](#6-alarmas-isa-182)
+7. [Mantenimiento predictivo y OEE](#7-mantenimiento-predictivo-y-oee)
+8. [Energía y costos](#8-energía-y-costos)
+9. [What-if & Replay](#9-what-if--replay)
+10. [Chat con la IA · diagnóstico rápido](#10-chat-con-la-ia--diagnóstico-rápido)
+11. [Cierre de turno · checklist](#11-cierre-de-turno--checklist)
+
+> Los capítulos exactos pueden variar según la versión del manual instalada. Usá el buscador del modal de docs (Ctrl-F) si no aparece alguno.
 
 ---
 
@@ -11,8 +31,10 @@
 Este sistema es un **gemelo digital** de una planta de procesamiento de yerba mate. Reproduce en tiempo real el flujo de masa y energía a través de las etapas industriales:
 
 ```
-RECEPCIÓN ──► ZAPECADO ──► SECADO ──► CANCHADO ──► CÁMARAS DE REPOSO ──► MOLIENDA/EMPAQUE
+RECEPCIÓN ──► ZAPECADO ──► SECADO ──► CANCHADO ──► CÁMARAS DE REPOSO ──► MOLIENDA FINA ──► EMPAQUE
 ```
+
+> En la tab **Flujo de masa** ves las 7 etapas en línea. Cada una procesa un tiempo mínimo antes de habilitar el botón → a la siguiente, y aplica la merma típica.
 
 Permite operar en tres modos:
 

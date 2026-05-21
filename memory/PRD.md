@@ -5,7 +5,7 @@ Migrar app Python/Tkinter de simulación de Yerba Mate a web (React + FastAPI)
 con protocolos industriales (Modbus, MQTT, OPC UA), IA (Gemini), clima real
 (Open-Meteo) y funcionalidad industrial completa.
 
-## Estado (mayo 2026) — Fase 6 BIDIRECCIONAL
+## Estado (mayo 2026) — Fase 6 BIDIRECCIONAL + 7 ETAPAS
 
 ### Características core
 - **Modelo físico puro** (sin τ→SP escondido). Balance energético/másico real.
@@ -14,23 +14,22 @@ con protocolos industriales (Modbus, MQTT, OPC UA), IA (Gemini), clima real
 - **Forecast horario** Open-Meteo (96h) usado cuando aceleración > 1×.
 - **Reloj simulado** que avanza con factor configurable (1× / 60× / 1h-s / 1d-s).
 - **8 inyecciones de falla** por etapa.
+- **Mass Flow 7 etapas end-to-end**: Recepción → Zapecado → Secado → Canchado → Estacionamiento → Molienda fina → Empaque (NEW mayo 2026).
 
 ### Modo BIDIRECCIONAL (todos los protocolos)
-- **MQTT** subscriber `yerba/cmd/#` parsea comandos JSON y los aplica al simulator.
-  - `yerba/cmd/{etapa}` con JSON payload (cualquier campo del Patch model)
-  - `yerba/cmd/camara/<idx>` para una cámara específica
-  - `yerba/cmd/weather` para override manual del ambient
-  - `yerba/cmd/sim` para globales (acel, throughput, mode)
-  - Atajo raw value: `yerba/cmd/zapecado/velocidad_chip` payload `45`
+- **MQTT** subscriber `yerba/cmd/#` parsea comandos JSON.
 - **Modbus TCP** (`_apply_external_writes` polling-diff cada 200ms).
 - **OPC UA** (`_apply_external_writes` cada 2s).
-- Manual override del clima persistente (no es pisado por forecast cuando
-  `weather_meta.source ∈ {manual, mqtt-cmd}`).
+- Manual override del clima persistente.
 
-### Documentación
-- `manual_operaciones.md` — flujo operativo desde la UI.
-- `manual_tecnico.md` — arquitectura, modelo físico, mapeo Modbus/OPC UA, MQTT, modo bidireccional.
-- `instructivo_nodered.md` — integración Node-RED, cámaras remotas, ejemplos de flow, troubleshooting.
+### Documentación (mayo 2026)
+- `00_indice.md` — **NEW** índice general con rutas de lectura por rol.
+- `01_instructivo_ejecucion.md` — **NEW** cómo levantar el sistema, puertos, .env, troubleshooting.
+- `manual_operaciones.md` — flujo operativo desde UI (con TOC).
+- `manual_gemelo_virtual.md` — **NEW** qué es un gemelo, los 4 modos, uso en paralelo con MQTT/Modbus/OPC UA.
+- `manual_machine_learning.md` — **NEW** IA integrada: Gemini 3 Flash, anomalías, forecast, optimización what-if.
+- `manual_tecnico.md` — arquitectura completa (con TOC).
+- `instructivo_nodered.md` — integración Node-RED (con TOC).
 
 ### Protocolos
 | Proto | Puerto | Latencia in | Latencia out | Modo |
@@ -44,13 +43,23 @@ con protocolos industriales (Modbus, MQTT, OPC UA), IA (Gemini), clima real
 - 13 tabs operativas, mímicos SVG/P&ID, sensores derivados.
 - PidPanel, FaultPanel, SpeedControl, WeatherControl.
 - useLocalSync hook (anti race condition).
-- Tour interactivo, DocsModal markdown viewer.
-- Theme dark global con textarea fix CSS.
+- TourModal (6 pasos), DocsModal markdown viewer.
+- MassFlowView con 7 etapas (incluye Molienda fina + Empaque).
+
+## Mermas referenciales (yerba mate end-to-end)
+- recepcion: 0%
+- zapecado: 35% (evaporación 50→25% hum)
+- secado: 22% (25→6%)
+- canchado: 4%
+- estacionamiento: 0.5%
+- **molienda_fina**: 3% (zarandeo, polvo, palitos)
+- **empaque**: 0.5% (descarte por defectos)
+
+Rendimiento típico: 1000 kg hoja verde → ~470 kg yerba empaquetada (47%).
 
 ## Tests
-- Iteración 11: 13/15 bidir tests pass (los 2 fallos fueron causa root del bug
-  weather override, ya fixeado).
-- 8 docs/test_reports historicos.
+- Iteración 11: 13/15 bidir tests pass.
+- Verificación post-cambios: flujo end-to-end de 7 etapas validado por curl (469.76 kg final desde 1000 kg).
 
 ## Credenciales
 - admin / admin
@@ -60,15 +69,17 @@ con protocolos industriales (Modbus, MQTT, OPC UA), IA (Gemini), clima real
 - `simulator` (default): física pura controlada desde UI/API.
 - `shadow`: refleja lecturas externas sin recalcular física.
 - `twin`: simula y compara vs planta real, emite correcciones.
+- `replay`: reproduce CSV histórico.
 
 ## Backlog priorizado
-- **P1**: "Molienda fina" y "Empaque" en Mass Flow (etapas finales).
-- **P2**: Reportes PDF por batch individual.
-- **P2**: Refactor `server.py` (1233 líneas) → routers por dominio.
+- **P1**: Refactor `server.py` (1233 líneas) → routers por dominio.
+- **P2**: Reportes PDF por batch individual (endpoint ya existe `/api/reports/batch/{id}`, falta UI para descargarlo desde lote).
+- **P2**: TimeGPT/Prophet para forecast horizontes >1h.
 - **P3**: ACL MQTT por topic + OPC UA con seguridad Sign+Encrypt.
-- **P3**: Replay desde stream MQTT real (grabar/reproducir planta).
+- **P3**: Replay con velocidad adaptativa según importancia del evento.
+- **P3**: Self-tuning de mermas por mínimos cuadrados sobre últimos 30 lotes.
 
 ## Notas
 - Open-Meteo tiene rate limit. Fallback estacional sintético implementado.
-- Para tests de MQTT en CI: instalar mosquitto `apt-get install -y mosquitto`.
 - OPC UA: nodos están bajo `Objects/{Zapecado,Secado,Canchado,Camara1..12,Simulacion}` namespace=2.
+- Mass flow: cuando `estacionamiento → molienda_fina`, el simulador no descarga las cámaras automáticamente; el operario puede ajustar `carga_kg` manualmente si quiere reflejar la salida en cámaras específicas.
