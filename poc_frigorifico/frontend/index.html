@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gemelo Digital Frigorífico</title>
+    <!-- React & ReactDOM (UMD) -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
+    <!-- Babel para compilar JSX en el navegador -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Tailwind CSS (CDN para prototipos rápidos) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #f3f4f6; }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function App() {
+            const [camaras, setCamaras] = useState([]);
+            const [tropas, setTropas] = useState([]);
+            const [historial, setHistorial] = useState([]);
+
+            const fetchData = async () => {
+                try {
+                    const resState = await fetch('/api/state');
+                    setCamaras(await resState.json());
+
+                    const resTropas = await fetch('/api/tropas');
+                    setTropas(await resTropas.json());
+
+                    const resHistorial = await fetch('/api/history?limit=10');
+                    setHistorial(await resHistorial.json());
+                } catch (e) {
+                    console.error("Error fetching data:", e);
+                }
+            };
+
+            useEffect(() => {
+                fetchData();
+                const interval = setInterval(fetchData, 1000); // Polling cada 1 segundo
+                return () => clearInterval(interval);
+            }, []);
+
+            const togglePuerta = async (idx, estadoActual) => {
+                await fetch(`/api/camaras/${idx}/puerta`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ abierta: !estadoActual })
+                });
+                fetchData();
+            };
+
+            const agregarTropaDemo = async () => {
+                const numero = `TR-${Math.floor(Math.random() * 1000)}`;
+                await fetch('/api/tropas', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ numero_tropa: numero, peso_kg: 10000, camara_inicial: "Cámara de Oreo" })
+                });
+                fetchData();
+            };
+
+            return (
+                <div className="min-h-screen p-8">
+                    <header className="mb-8">
+                        <h1 className="text-3xl font-bold text-gray-800">Gemelo Digital Frigorífico</h1>
+                        <p className="text-gray-500">Panel de Control en Tiempo Real</p>
+                    </header>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                        {camaras.map((c, idx) => (
+                            <div key={idx} className="bg-white rounded-lg shadow-md p-6 border-t-4 border-blue-500">
+                                <h2 className="text-xl font-semibold mb-2">{c.nombre}</h2>
+                                <div className="flex justify-between items-end mb-4">
+                                    <div>
+                                        <p className="text-sm text-gray-500">Temp. Actual</p>
+                                        <p className={`text-4xl font-bold ${c.temp_actual > c.temp_objetivo + 2 ? 'text-red-500' : 'text-green-500'}`}>
+                                            {c.temp_actual}°C
+                                        </p>
+                                    </div>
+                                    <div className="text-right">
+                                        <p className="text-sm text-gray-500">Objetivo</p>
+                                        <p className="text-lg font-medium">{c.temp_objetivo}°C</p>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2 mb-4">
+                                    <span className={`px-2 py-1 text-xs font-bold rounded ${c.compresor === 'ON' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                                        COMPRESOR: {c.compresor}
+                                    </span>
+                                    <span className={`px-2 py-1 text-xs font-bold rounded ${c.puerta === 'ABIERTA' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                        PUERTA: {c.puerta}
+                                    </span>
+                                </div>
+                                <button
+                                    onClick={() => togglePuerta(idx, c.puerta === 'ABIERTA')}
+                                    className="w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
+                                >
+                                    {c.puerta === 'ABIERTA' ? 'Cerrar Puerta' : 'Abrir Puerta'}
+                                </button>
+                            </div>
+                        ))}
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-semibold">Trazabilidad de Tropas</h2>
+                                <button onClick={agregarTropaDemo} className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm">
+                                    + Ingresar Tropa
+                                </button>
+                            </div>
+                            {tropas.length === 0 ? (
+                                <p className="text-gray-500 italic">No hay tropas ingresadas.</p>
+                            ) : (
+                                <ul className="divide-y divide-gray-200">
+                                    {tropas.map((t, i) => (
+                                        <li key={i} className="py-3 flex justify-between">
+                                            <span className="font-medium">{t.numero_tropa}</span>
+                                            <span className="text-gray-600">{t.peso_kg} kg</span>
+                                            <span className="text-blue-600">{t.camara_actual}</span>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+
+                        <div className="bg-white rounded-lg shadow-md p-6">
+                            <h2 className="text-xl font-semibold mb-4">Historial Reciente (Log)</h2>
+                            <div className="space-y-2 text-sm">
+                                {historial.map((h, i) => (
+                                    <div key={i} className="flex justify-between border-b pb-1">
+                                        <span className="text-gray-500">{new Date(h.timestamp).toLocaleTimeString()}</span>
+                                        <span className="font-medium truncate w-32">{h.camara_nombre}</span>
+                                        <span className={h.temp_actual > h.temp_objetivo + 2 ? 'text-red-500 font-bold' : ''}>
+                                            {h.temp_actual}°C
+                                        </span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
