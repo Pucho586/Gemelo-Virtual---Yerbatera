@@ -1,41 +1,37 @@
 import time
+from typing import Dict, List
 
 class CamaraFrio:
     """Modelo físico simplificado de una cámara frigorífica."""
-    def __init__(self, nombre: str, temp_objetivo: float, aislamiento_k: float = 0.05, poder_enfriamiento: float = 1.5):
+    def __init__(self, nombre: str, temp_objetivo: float, aislamiento_k: float, poder_enfriamiento: float):
         self.nombre = nombre
         self.temp_objetivo = temp_objetivo
 
         # Estado actual
-        self.temperatura_actual = 15.0 # Empieza a temperatura ambiente (ej: 15°C)
+        self.temperatura_actual = 15.0 # Empieza a temperatura ambiente
         self.compresor_encendido = True
         self.puerta_abierta = False
 
         # Constantes térmicas
-        self.aislamiento_k = aislamiento_k # Tasa de pérdida de frío (calentamiento)
-        self.poder_enfriamiento = poder_enfriamiento # Cuántos grados baja por tick cuando el compresor anda
+        self.aislamiento_k = aislamiento_k
+        self.poder_enfriamiento = poder_enfriamiento
         self.temp_ambiente = 25.0
 
     def tick(self, dt: float = 1.0):
         """Avanza la simulación dt minutos."""
-        # 1. Pérdida de frío (ganancia de calor del ambiente)
-        # Sigue la ley de enfriamiento de Newton: pérdida proporcional a la diferencia de temp.
         tasa_calentamiento = self.aislamiento_k
         if self.puerta_abierta:
-            tasa_calentamiento *= 5.0 # Si la puerta está abierta, entra calor mucho más rápido
+            tasa_calentamiento *= 5.0
 
         delta_temp = (self.temp_ambiente - self.temperatura_actual) * tasa_calentamiento * dt
         self.temperatura_actual += delta_temp
 
-        # 2. Enfriamiento (si el compresor está encendido)
         if self.compresor_encendido:
             self.temperatura_actual -= self.poder_enfriamiento * dt
 
-        # 3. Lógica de control simple (Termostato / Histéresis)
-        # Si la temperatura sube 1 grado por encima del objetivo, encendemos
+        # Termostato
         if self.temperatura_actual > self.temp_objetivo + 1.0:
             self.compresor_encendido = True
-        # Si baja hasta el objetivo, apagamos
         elif self.temperatura_actual <= self.temp_objetivo:
             self.compresor_encendido = False
 
@@ -48,23 +44,59 @@ class CamaraFrio:
             "puerta": "ABIERTA" if self.puerta_abierta else "CERRADA"
         }
 
+class FrigorificoSimulator:
+    """Gestiona el conjunto de cámaras del frigorífico."""
+    def __init__(self):
+        # 1. Oreo: Enfriamiento inicial, mucha carga térmica (alta potencia).
+        self.camara_oreo = CamaraFrio("Cámara de Oreo", temp_objetivo=2.0, aislamiento_k=0.08, poder_enfriamiento=2.0)
+
+        # 2. Mantenimiento: Conservación de media res fresca.
+        self.camara_mantenimiento = CamaraFrio("Mantenimiento", temp_objetivo=0.0, aislamiento_k=0.05, poder_enfriamiento=1.0)
+
+        # 3. Túnel Rápido: Congelación extrema muy rápida.
+        self.tunel_rapido = CamaraFrio("Túnel de Congelado", temp_objetivo=-30.0, aislamiento_k=0.10, poder_enfriamiento=4.0)
+
+        # 4. Congelados: Depósito a largo plazo.
+        self.camara_congelados = CamaraFrio("Cámara de Congelados", temp_objetivo=-18.0, aislamiento_k=0.02, poder_enfriamiento=0.8)
+
+        # 5. Desposte: Sala de trabajo, temperatura moderada.
+        self.sala_desposte = CamaraFrio("Sala de Desposte", temp_objetivo=10.0, aislamiento_k=0.15, poder_enfriamiento=1.5)
+
+        self.camaras: List[CamaraFrio] = [
+            self.camara_oreo,
+            self.camara_mantenimiento,
+            self.tunel_rapido,
+            self.camara_congelados,
+            self.sala_desposte
+        ]
+
+    def tick(self, dt: float = 1.0):
+        for camara in self.camaras:
+            camara.tick(dt)
+
+    def estado_global(self) -> List[dict]:
+        return [c.estado() for c in self.camaras]
+
 if __name__ == "__main__":
-    print("--- Iniciando Prueba de Concepto: Simulador Frigorífico ---")
-    camara_oreo = CamaraFrio(nombre="Cámara de Oreo 1", temp_objetivo=2.0)
+    print("--- Simulador Frigorífico: 5 Cámaras Principales ---")
+    simulador = FrigorificoSimulator()
 
-    print("Simulando primeros 20 minutos (1 tick = 1 minuto simulado)...\n")
-    for minuto in range(1, 21):
-        # En el minuto 10 alguien abre la puerta
+    print("Simulando primeros 15 minutos (1 tick = 1 minuto simulado)...")
+    for minuto in range(1, 16):
+        # Eventos aleatorios
+        if minuto == 5:
+            print("\n>> [EVENTO] Comienza el turno de desposte (abren puertas).")
+            simulador.sala_desposte.puerta_abierta = True
+            simulador.camara_oreo.puerta_abierta = True
+
         if minuto == 10:
-            print(">> [EVENTO] Operario abre la puerta de la cámara.")
-            camara_oreo.puerta_abierta = True
+            print("\n>> [EVENTO] Se cierra la cámara de oreo.")
+            simulador.camara_oreo.puerta_abierta = False
 
-        # En el minuto 13 la cierran
-        if minuto == 13:
-            print(">> [EVENTO] Operario cierra la puerta.")
-            camara_oreo.puerta_abierta = False
+        simulador.tick()
+        estados = simulador.estado_global()
 
-        camara_oreo.tick()
-        estado = camara_oreo.estado()
-        print(f"Minuto {minuto:02d} | Temp: {estado['temp_actual']}°C | Compresor: {estado['compresor']} | Puerta: {estado['puerta']}")
-        time.sleep(0.1) # Para verlo en consola
+        # Mostrar resumen en línea
+        resumen = " | ".join([f"{e['nombre'][:4]}: {e['temp_actual']}°C" for e in estados])
+        print(f"Min {minuto:02d} -> {resumen}")
+        time.sleep(0.2)
