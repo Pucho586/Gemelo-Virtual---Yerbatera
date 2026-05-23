@@ -20,16 +20,21 @@
             const [tabActivo, setTabActivo] = useState('dashboard');
 
             const [modo, setModo] = useState('simulador');
+            const [fallaActiva, setFallaActiva] = useState(false);
             const [camaras, setCamaras] = useState([]);
             const [tropas, setTropas] = useState([]);
             const [historial, setHistorial] = useState([]);
             const [comms, setComms] = useState({});
+
+            // Console state
+            const [consoleLog, setConsoleLog] = useState([]);
 
             const fetchData = async () => {
                 try {
                     const resState = await fetch('/api/state');
                     const stateData = await resState.json();
                     setModo(stateData.modo);
+                    setFallaActiva(stateData.falla_inyectada);
                     setCamaras(stateData.camaras);
 
                     if (tabActivo === 'dashboard') {
@@ -74,6 +79,15 @@
                 fetchData();
             };
 
+            const toggleFalla = async () => {
+                await fetch('/api/falla', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ falla_activa: !fallaActiva })
+                });
+                fetchData();
+            }
+
             const agregarTropaDemo = async () => {
                 const numero = `TR-${Math.floor(Math.random() * 1000)}`;
                 await fetch('/api/tropas', {
@@ -84,10 +98,31 @@
                 fetchData();
             };
 
+            const sendIndustrialCommand = async (protocol, idx, isAbierta) => {
+                const accion = isAbierta ? "cerrar_puerta" : "abrir_puerta";
+                try {
+                    const res = await fetch('/api/comms/send', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ protocolo: protocol, camara_idx: idx, accion: accion })
+                    });
+                    const data = await res.json();
+
+                    const timeStr = new Date().toLocaleTimeString();
+                    if(res.ok) {
+                        setConsoleLog(prev => [`[${timeStr}] [SUCCESS] ${data.mensaje}`, ...prev]);
+                    } else {
+                        setConsoleLog(prev => [`[${timeStr}] [ERROR] ${data.detail}`, ...prev]);
+                    }
+                } catch(e) {
+                    setConsoleLog(prev => [`[ERROR] Falla de red`, ...prev]);
+                }
+            };
+
             return (
-                <div className="min-h-screen">
+                <div className="min-h-screen flex flex-col">
                     {/* NAV BAR */}
-                    <nav className="bg-gray-800 text-white p-4 flex justify-between items-center">
+                    <nav className="bg-gray-800 text-white p-4 flex justify-between items-center shadow-md z-10 relative">
                         <div className="flex items-center gap-4">
                             <h1 className="text-xl font-bold">Gemelo Frigorífico</h1>
                             <div className="flex gap-2">
@@ -104,24 +139,39 @@
                         </div>
                     </nav>
 
-                    <div className="p-8">
+                    <div className="p-8 flex-1">
                         {/* TAB DASHBOARD */}
                         {tabActivo === 'dashboard' && (
                             <div>
+                                {modo === 'gemelo' && (
+                                    <div className="mb-6 p-4 bg-purple-100 text-purple-900 rounded-lg flex justify-between items-center border border-purple-300 shadow-sm">
+                                        <div>
+                                            <h3 className="font-bold text-lg">⚙️ Modo Gemelo Digital Activo</h3>
+                                            <p className="text-sm">El sistema está comparando el modelo matemático (Teórico) con los datos del PLC (Actual). Si divergen, se alertará una falla.</p>
+                                        </div>
+                                        <button onClick={toggleFalla} className={`px-4 py-2 font-bold rounded text-white ${fallaActiva ? 'bg-red-500 hover:bg-red-600' : 'bg-orange-500 hover:bg-orange-600'}`}>
+                                            {fallaActiva ? 'Desactivar Falla Simulada' : 'Inyectar Falla en Sensor'}
+                                        </button>
+                                    </div>
+                                )}
+
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
                                     {camaras.map((c, idx) => (
-                                        <div key={idx} className="bg-white rounded-lg shadow-md p-6 border-t-4 border-blue-500">
-                                            <h2 className="text-xl font-semibold mb-2">{c.nombre}</h2>
+                                        <div key={idx} className={`bg-white rounded-lg shadow-md p-6 border-t-4 ${c.falla ? 'border-red-500 bg-red-50' : 'border-blue-500'}`}>
+                                            <div className="flex justify-between">
+                                                <h2 className="text-xl font-semibold mb-2">{c.nombre}</h2>
+                                                {c.falla && <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded animate-pulse">¡FALLA DETECTADA!</span>}
+                                            </div>
                                             <div className="flex justify-between items-end mb-4">
                                                 <div>
-                                                    <p className="text-sm text-gray-500">Temp. Actual</p>
+                                                    <p className="text-sm text-gray-500">Temp. Sensor (Real)</p>
                                                     <p className={`text-4xl font-bold ${c.temp_actual > c.temp_objetivo + 2 ? 'text-red-500' : 'text-green-500'}`}>
                                                         {c.temp_actual}°C
                                                     </p>
                                                 </div>
                                                 <div className="text-right">
-                                                    <p className="text-sm text-gray-500">Objetivo</p>
-                                                    <p className="text-lg font-medium">{c.temp_objetivo}°C</p>
+                                                    <p className="text-sm text-gray-500">Modelo Teórico</p>
+                                                    <p className="text-lg font-medium text-blue-600">{c.temp_teorica}°C</p>
                                                 </div>
                                             </div>
                                             <div className="flex gap-2 mb-4">
@@ -150,7 +200,7 @@
                                             </button>
                                         </div>
                                         {tropas.length === 0 ? <p className="text-gray-500 italic">No hay tropas ingresadas.</p> : (
-                                            <ul className="divide-y divide-gray-200">
+                                            <ul className="divide-y divide-gray-200 h-48 overflow-y-auto">
                                                 {tropas.map((t, i) => (
                                                     <li key={i} className="py-3 flex justify-between">
                                                         <span className="font-medium">{t.numero_tropa}</span>
@@ -163,8 +213,8 @@
                                     </div>
 
                                     <div className="bg-white rounded-lg shadow-md p-6">
-                                        <h2 className="text-xl font-semibold mb-4">Historial Reciente (Log)</h2>
-                                        <div className="space-y-2 text-sm">
+                                        <h2 className="text-xl font-semibold mb-4">Historial de Logs (DB)</h2>
+                                        <div className="space-y-2 text-sm h-48 overflow-y-auto">
                                             {historial.map((h, i) => (
                                                 <div key={i} className="flex justify-between border-b pb-1">
                                                     <span className="text-gray-500">{new Date(h.timestamp).toLocaleTimeString()}</span>
@@ -182,12 +232,12 @@
 
                         {/* TAB CONFIGURACIÓN */}
                         {tabActivo === 'config' && (
-                            <div className="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto">
+                            <div className="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto border-t-4 border-blue-500">
                                 <h2 className="text-2xl font-bold mb-6">Configuración del Sistema</h2>
 
                                 <div className="mb-8 p-4 bg-gray-50 rounded border">
                                     <h3 className="font-semibold text-lg mb-2">Modo de Operación</h3>
-                                    <p className="text-gray-600 mb-4 text-sm">El "Modo Simulador" usa física matemática. El "Modo Gemelo" lee datos reales vía Modbus/OPC.</p>
+                                    <p className="text-gray-600 mb-4 text-sm">El "Modo Simulador" usa física matemática. El "Modo Gemelo" compara la física con los datos reales leídos vía Modbus/OPC para detectar fallas.</p>
                                     <button onClick={toggleModo} className={`px-4 py-2 text-white font-bold rounded ${modo === 'gemelo' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-green-600 hover:bg-green-700'}`}>
                                         Cambiar a Modo {modo === 'simulador' ? 'Gemelo (Conectar Sensores)' : 'Simulador (Desconectar)'}
                                     </button>
@@ -217,23 +267,54 @@
 
                         {/* TAB COMUNICACIONES */}
                         {tabActivo === 'comms' && (
-                            <div className="bg-white rounded-lg shadow-md p-6 max-w-3xl mx-auto">
-                                <h2 className="text-2xl font-bold mb-6">Estado de Comunicaciones Industriales</h2>
-                                {modo === 'simulador' && (
-                                    <div className="bg-yellow-100 text-yellow-800 p-4 rounded mb-6">
-                                        ⚠️ Cambiá a "Modo Gemelo" en Configuración para activar las conexiones.
-                                    </div>
-                                )}
-                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                                    {Object.entries(comms).map(([protocol, info]) => (
-                                        <div key={protocol} className="border p-4 rounded">
-                                            <h3 className="uppercase font-bold text-lg mb-2">{protocol}</h3>
-                                            <p className={`font-semibold mb-2 ${info.status.includes('Conectado') ? 'text-green-600' : 'text-red-500'}`}>
-                                                {info.status}
-                                            </p>
-                                            <p className="text-sm text-gray-500 font-mono break-all">{info.config}</p>
+                            <div className="max-w-5xl mx-auto flex flex-col gap-6">
+                                <div className="bg-white rounded-lg shadow-md p-6 border-t-4 border-blue-500">
+                                    <h2 className="text-2xl font-bold mb-6">Estado de Comunicaciones Industriales</h2>
+                                    {modo === 'simulador' && (
+                                        <div className="bg-yellow-100 text-yellow-800 p-4 rounded mb-6">
+                                            ⚠️ Cambiá a "Modo Gemelo" en Configuración para activar las conexiones al PLC.
                                         </div>
-                                    ))}
+                                    )}
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                        {Object.entries(comms).map(([protocol, info]) => (
+                                            <div key={protocol} className="border p-4 rounded bg-gray-50">
+                                                <h3 className="uppercase font-bold text-lg mb-2">{protocol}</h3>
+                                                <p className={`font-semibold mb-2 ${info.status.includes('Conectado') ? 'text-green-600' : 'text-red-500'}`}>
+                                                    {info.status}
+                                                </p>
+                                                <p className="text-sm text-gray-500 font-mono break-all">{info.config}</p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="bg-gray-900 text-white rounded-lg shadow-md p-6 flex gap-6">
+                                    <div className="flex-1">
+                                        <h3 className="text-xl font-bold mb-4 text-green-400">Consola de Control de Planta (SCADA)</h3>
+                                        <p className="text-sm text-gray-400 mb-4">Enviá comandos a los actuadores reales a través de los protocolos industriales de comunicación.</p>
+
+                                        <div className="space-y-4">
+                                            {camaras.map((c, idx) => (
+                                                <div key={idx} className="flex items-center justify-between bg-gray-800 p-3 rounded">
+                                                    <span>{c.nombre} (Puerta: {c.puerta})</span>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => sendIndustrialCommand('Modbus', idx, c.puerta==='ABIERTA')} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-sm font-bold">Vía MODBUS</button>
+                                                        <button onClick={() => sendIndustrialCommand('OPCUA', idx, c.puerta==='ABIERTA')} className="bg-indigo-600 hover:bg-indigo-500 px-2 py-1 rounded text-sm font-bold">Vía OPC UA</button>
+                                                        <button onClick={() => sendIndustrialCommand('MQTT', idx, c.puerta==='ABIERTA')} className="bg-teal-600 hover:bg-teal-500 px-2 py-1 rounded text-sm font-bold">Vía MQTT</button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                    <div className="w-1/3 bg-black rounded border border-gray-700 p-4 overflow-y-auto h-96">
+                                        <h4 className="text-xs text-gray-500 font-bold mb-2">TERMINAL LOG</h4>
+                                        <div className="space-y-1 font-mono text-xs">
+                                            {consoleLog.length === 0 ? <span className="text-gray-600">Esperando comandos...</span> : null}
+                                            {consoleLog.map((log, i) => (
+                                                <div key={i} className={log.includes('ERROR') ? 'text-red-400' : 'text-green-300'}>{log}</div>
+                                            ))}
+                                        </div>
+                                    </div>
                                 </div>
                             </div>
                         )}

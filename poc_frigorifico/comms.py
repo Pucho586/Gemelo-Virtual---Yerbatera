@@ -1,12 +1,9 @@
-# Dummy communication services to demonstrate integration
-
 class CommsManager:
     def __init__(self):
         self.modbus_status = "Desconectado"
         self.opcua_status = "Desconectado"
         self.mqtt_status = "Desconectado"
 
-        # Configuración por defecto
         self.config = {
             "modbus_host": "192.168.1.100",
             "modbus_port": 502,
@@ -15,7 +12,6 @@ class CommsManager:
         }
 
     def connect_all(self):
-        # Aquí iría la lógica real de conexión a PLC's
         self.modbus_status = "Conectado (Leyendo PLC-1)"
         self.opcua_status = "Conectado (Servidor Activo)"
         self.mqtt_status = "Conectado (Suscrito a frigorifico/telemetry)"
@@ -34,3 +30,11 @@ class CommsManager:
             "opcua": {"status": self.opcua_status, "config": self.config["opcua_endpoint"]},
             "mqtt": {"status": self.mqtt_status, "config": self.config["mqtt_broker"]}
         }
+
+    def send_command(self, protocol: str, command: dict) -> bool:
+        """Simula el envío de un comando industrial a la planta real."""
+        # En la vida real, aquí usaríamos pymodbus o asyncua para escribir en el PLC.
+        status = getattr(self, f"{protocol.lower()}_status", "Desconectado")
+        if not status.startswith("Conectado"):
+            return False
+        return True
