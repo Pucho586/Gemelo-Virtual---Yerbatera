@@ -4,16 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Gemelo Digital Frigorífico</title>
-    <!-- React & ReactDOM (UMD) -->
     <script crossorigin src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
-    <!-- Babel para compilar JSX en el navegador -->
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <!-- Tailwind CSS (CDN para prototipos rápidos) -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <style>
-        body { background-color: #f3f4f6; }
-    </style>
+    <style>body { background-color: #f3f4f6; }</style>
 </head>
 <body>
     <div id="root"></div>
@@ -22,20 +17,33 @@
         const { useState, useEffect } = React;
 
         function App() {
+            const [tabActivo, setTabActivo] = useState('dashboard');
+
+            const [modo, setModo] = useState('simulador');
             const [camaras, setCamaras] = useState([]);
             const [tropas, setTropas] = useState([]);
             const [historial, setHistorial] = useState([]);
+            const [comms, setComms] = useState({});
 
             const fetchData = async () => {
                 try {
                     const resState = await fetch('/api/state');
-                    setCamaras(await resState.json());
+                    const stateData = await resState.json();
+                    setModo(stateData.modo);
+                    setCamaras(stateData.camaras);
 
-                    const resTropas = await fetch('/api/tropas');
-                    setTropas(await resTropas.json());
+                    if (tabActivo === 'dashboard') {
+                        const resTropas = await fetch('/api/tropas');
+                        setTropas(await resTropas.json());
 
-                    const resHistorial = await fetch('/api/history?limit=10');
-                    setHistorial(await resHistorial.json());
+                        const resHistorial = await fetch('/api/history?limit=10');
+                        setHistorial(await resHistorial.json());
+                    }
+
+                    if (tabActivo === 'comms' || tabActivo === 'config') {
+                        const resComms = await fetch('/api/comms');
+                        setComms(await resComms.json());
+                    }
                 } catch (e) {
                     console.error("Error fetching data:", e);
                 }
@@ -43,15 +51,25 @@
 
             useEffect(() => {
                 fetchData();
-                const interval = setInterval(fetchData, 1000); // Polling cada 1 segundo
+                const interval = setInterval(fetchData, 1000);
                 return () => clearInterval(interval);
-            }, []);
+            }, [tabActivo]);
 
             const togglePuerta = async (idx, estadoActual) => {
                 await fetch(`/api/camaras/${idx}/puerta`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ abierta: !estadoActual })
+                });
+                fetchData();
+            };
+
+            const toggleModo = async () => {
+                const nuevoModo = modo === 'simulador' ? 'gemelo' : 'simulador';
+                await fetch('/api/mode', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ modo: nuevoModo })
                 });
                 fetchData();
             };
@@ -67,83 +85,158 @@
             };
 
             return (
-                <div className="min-h-screen p-8">
-                    <header className="mb-8">
-                        <h1 className="text-3xl font-bold text-gray-800">Gemelo Digital Frigorífico</h1>
-                        <p className="text-gray-500">Panel de Control en Tiempo Real</p>
-                    </header>
-
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                        {camaras.map((c, idx) => (
-                            <div key={idx} className="bg-white rounded-lg shadow-md p-6 border-t-4 border-blue-500">
-                                <h2 className="text-xl font-semibold mb-2">{c.nombre}</h2>
-                                <div className="flex justify-between items-end mb-4">
-                                    <div>
-                                        <p className="text-sm text-gray-500">Temp. Actual</p>
-                                        <p className={`text-4xl font-bold ${c.temp_actual > c.temp_objetivo + 2 ? 'text-red-500' : 'text-green-500'}`}>
-                                            {c.temp_actual}°C
-                                        </p>
-                                    </div>
-                                    <div className="text-right">
-                                        <p className="text-sm text-gray-500">Objetivo</p>
-                                        <p className="text-lg font-medium">{c.temp_objetivo}°C</p>
-                                    </div>
-                                </div>
-                                <div className="flex gap-2 mb-4">
-                                    <span className={`px-2 py-1 text-xs font-bold rounded ${c.compresor === 'ON' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                                        COMPRESOR: {c.compresor}
-                                    </span>
-                                    <span className={`px-2 py-1 text-xs font-bold rounded ${c.puerta === 'ABIERTA' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
-                                        PUERTA: {c.puerta}
-                                    </span>
-                                </div>
-                                <button
-                                    onClick={() => togglePuerta(idx, c.puerta === 'ABIERTA')}
-                                    className="w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded"
-                                >
-                                    {c.puerta === 'ABIERTA' ? 'Cerrar Puerta' : 'Abrir Puerta'}
-                                </button>
+                <div className="min-h-screen">
+                    {/* NAV BAR */}
+                    <nav className="bg-gray-800 text-white p-4 flex justify-between items-center">
+                        <div className="flex items-center gap-4">
+                            <h1 className="text-xl font-bold">Gemelo Frigorífico</h1>
+                            <div className="flex gap-2">
+                                <button onClick={() => setTabActivo('dashboard')} className={`px-3 py-1 rounded ${tabActivo === 'dashboard' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>Dashboard</button>
+                                <button onClick={() => setTabActivo('config')} className={`px-3 py-1 rounded ${tabActivo === 'config' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>Configuración</button>
+                                <button onClick={() => setTabActivo('comms')} className={`px-3 py-1 rounded ${tabActivo === 'comms' ? 'bg-blue-600' : 'hover:bg-gray-700'}`}>Comunicaciones</button>
                             </div>
-                        ))}
-                    </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm">Modo Actual:</span>
+                            <span className={`px-2 py-1 text-xs font-bold rounded uppercase ${modo === 'gemelo' ? 'bg-purple-600' : 'bg-green-600'}`}>
+                                {modo}
+                            </span>
+                        </div>
+                    </nav>
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div className="bg-white rounded-lg shadow-md p-6">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl font-semibold">Trazabilidad de Tropas</h2>
-                                <button onClick={agregarTropaDemo} className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm">
-                                    + Ingresar Tropa
-                                </button>
-                            </div>
-                            {tropas.length === 0 ? (
-                                <p className="text-gray-500 italic">No hay tropas ingresadas.</p>
-                            ) : (
-                                <ul className="divide-y divide-gray-200">
-                                    {tropas.map((t, i) => (
-                                        <li key={i} className="py-3 flex justify-between">
-                                            <span className="font-medium">{t.numero_tropa}</span>
-                                            <span className="text-gray-600">{t.peso_kg} kg</span>
-                                            <span className="text-blue-600">{t.camara_actual}</span>
-                                        </li>
+                    <div className="p-8">
+                        {/* TAB DASHBOARD */}
+                        {tabActivo === 'dashboard' && (
+                            <div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                                    {camaras.map((c, idx) => (
+                                        <div key={idx} className="bg-white rounded-lg shadow-md p-6 border-t-4 border-blue-500">
+                                            <h2 className="text-xl font-semibold mb-2">{c.nombre}</h2>
+                                            <div className="flex justify-between items-end mb-4">
+                                                <div>
+                                                    <p className="text-sm text-gray-500">Temp. Actual</p>
+                                                    <p className={`text-4xl font-bold ${c.temp_actual > c.temp_objetivo + 2 ? 'text-red-500' : 'text-green-500'}`}>
+                                                        {c.temp_actual}°C
+                                                    </p>
+                                                </div>
+                                                <div className="text-right">
+                                                    <p className="text-sm text-gray-500">Objetivo</p>
+                                                    <p className="text-lg font-medium">{c.temp_objetivo}°C</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-2 mb-4">
+                                                <span className={`px-2 py-1 text-xs font-bold rounded ${c.compresor === 'ON' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
+                                                    COMPRESOR: {c.compresor}
+                                                </span>
+                                                <span className={`px-2 py-1 text-xs font-bold rounded ${c.puerta === 'ABIERTA' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
+                                                    PUERTA: {c.puerta}
+                                                </span>
+                                            </div>
+                                            {modo === 'simulador' && (
+                                                <button onClick={() => togglePuerta(idx, c.puerta === 'ABIERTA')} className="w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
+                                                    {c.puerta === 'ABIERTA' ? 'Cerrar Puerta' : 'Abrir Puerta'}
+                                                </button>
+                                            )}
+                                        </div>
                                     ))}
-                                </ul>
-                            )}
-                        </div>
+                                </div>
 
-                        <div className="bg-white rounded-lg shadow-md p-6">
-                            <h2 className="text-xl font-semibold mb-4">Historial Reciente (Log)</h2>
-                            <div className="space-y-2 text-sm">
-                                {historial.map((h, i) => (
-                                    <div key={i} className="flex justify-between border-b pb-1">
-                                        <span className="text-gray-500">{new Date(h.timestamp).toLocaleTimeString()}</span>
-                                        <span className="font-medium truncate w-32">{h.camara_nombre}</span>
-                                        <span className={h.temp_actual > h.temp_objetivo + 2 ? 'text-red-500 font-bold' : ''}>
-                                            {h.temp_actual}°C
-                                        </span>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                    <div className="bg-white rounded-lg shadow-md p-6">
+                                        <div className="flex justify-between items-center mb-4">
+                                            <h2 className="text-xl font-semibold">Trazabilidad de Tropas</h2>
+                                            <button onClick={agregarTropaDemo} className="bg-blue-500 hover:bg-blue-600 text-white px-3 py-1 rounded text-sm">
+                                                + Ingresar Tropa
+                                            </button>
+                                        </div>
+                                        {tropas.length === 0 ? <p className="text-gray-500 italic">No hay tropas ingresadas.</p> : (
+                                            <ul className="divide-y divide-gray-200">
+                                                {tropas.map((t, i) => (
+                                                    <li key={i} className="py-3 flex justify-between">
+                                                        <span className="font-medium">{t.numero_tropa}</span>
+                                                        <span className="text-gray-600">{t.peso_kg} kg</span>
+                                                        <span className="text-blue-600">{t.camara_actual}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        )}
                                     </div>
-                                ))}
+
+                                    <div className="bg-white rounded-lg shadow-md p-6">
+                                        <h2 className="text-xl font-semibold mb-4">Historial Reciente (Log)</h2>
+                                        <div className="space-y-2 text-sm">
+                                            {historial.map((h, i) => (
+                                                <div key={i} className="flex justify-between border-b pb-1">
+                                                    <span className="text-gray-500">{new Date(h.timestamp).toLocaleTimeString()}</span>
+                                                    <span className="font-medium truncate w-32">{h.camara_nombre}</span>
+                                                    <span className={h.temp_actual > h.temp_objetivo + 2 ? 'text-red-500 font-bold' : ''}>
+                                                        {h.temp_actual}°C
+                                                    </span>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        </div>
+                        )}
+
+                        {/* TAB CONFIGURACIÓN */}
+                        {tabActivo === 'config' && (
+                            <div className="bg-white rounded-lg shadow-md p-6 max-w-2xl mx-auto">
+                                <h2 className="text-2xl font-bold mb-6">Configuración del Sistema</h2>
+
+                                <div className="mb-8 p-4 bg-gray-50 rounded border">
+                                    <h3 className="font-semibold text-lg mb-2">Modo de Operación</h3>
+                                    <p className="text-gray-600 mb-4 text-sm">El "Modo Simulador" usa física matemática. El "Modo Gemelo" lee datos reales vía Modbus/OPC.</p>
+                                    <button onClick={toggleModo} className={`px-4 py-2 text-white font-bold rounded ${modo === 'gemelo' ? 'bg-purple-600 hover:bg-purple-700' : 'bg-green-600 hover:bg-green-700'}`}>
+                                        Cambiar a Modo {modo === 'simulador' ? 'Gemelo (Conectar Sensores)' : 'Simulador (Desconectar)'}
+                                    </button>
+                                </div>
+
+                                <div>
+                                    <h3 className="font-semibold text-lg mb-4">Temperaturas Objetivo (Setpoints)</h3>
+                                    {camaras.map((c, idx) => (
+                                        <div key={idx} className="flex justify-between items-center py-2 border-b">
+                                            <span>{c.nombre}</span>
+                                            <div className="flex items-center gap-2">
+                                                <input type="number" defaultValue={c.temp_objetivo} className="border p-1 w-20 rounded" id={`target-${idx}`}/>
+                                                <button onClick={() => {
+                                                    const val = parseFloat(document.getElementById(`target-${idx}`).value);
+                                                    fetch(`/api/camaras/${idx}/objetivo`, {
+                                                        method: 'POST',
+                                                        headers: {'Content-Type': 'application/json'},
+                                                        body: JSON.stringify({temp_objetivo: val})
+                                                    });
+                                                }} className="bg-gray-800 text-white px-2 py-1 text-sm rounded">Guardar</button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* TAB COMUNICACIONES */}
+                        {tabActivo === 'comms' && (
+                            <div className="bg-white rounded-lg shadow-md p-6 max-w-3xl mx-auto">
+                                <h2 className="text-2xl font-bold mb-6">Estado de Comunicaciones Industriales</h2>
+                                {modo === 'simulador' && (
+                                    <div className="bg-yellow-100 text-yellow-800 p-4 rounded mb-6">
+                                        ⚠️ Cambiá a "Modo Gemelo" en Configuración para activar las conexiones.
+                                    </div>
+                                )}
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                                    {Object.entries(comms).map(([protocol, info]) => (
+                                        <div key={protocol} className="border p-4 rounded">
+                                            <h3 className="uppercase font-bold text-lg mb-2">{protocol}</h3>
+                                            <p className={`font-semibold mb-2 ${info.status.includes('Conectado') ? 'text-green-600' : 'text-red-500'}`}>
+                                                {info.status}
+                                            </p>
+                                            <p className="text-sm text-gray-500 font-mono break-all">{info.config}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             );

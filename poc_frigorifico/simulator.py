@@ -18,7 +18,7 @@ class CamaraFrio:
         self.temp_ambiente = 25.0
 
     def tick(self, dt: float = 1.0):
-        """Avanza la simulación dt minutos."""
+        """Avanza la simulación dt minutos (Modo Simulador)."""
         tasa_calentamiento = self.aislamiento_k
         if self.puerta_abierta:
             tasa_calentamiento *= 5.0
@@ -47,6 +47,8 @@ class CamaraFrio:
 class FrigorificoSimulator:
     """Gestiona el conjunto de cámaras del frigorífico."""
     def __init__(self):
+        self.modo = "simulador" # "simulador" o "gemelo"
+
         # 1. Oreo: Enfriamiento inicial, mucha carga térmica (alta potencia).
         self.camara_oreo = CamaraFrio("Cámara de Oreo", temp_objetivo=2.0, aislamiento_k=0.08, poder_enfriamiento=2.0)
 
@@ -71,32 +73,19 @@ class FrigorificoSimulator:
         ]
 
     def tick(self, dt: float = 1.0):
+        # Si está en modo "gemelo", la física se pausa y los datos vienen de afuera.
+        if self.modo == "simulador":
+            for camara in self.camaras:
+                camara.tick(dt)
+
+    def aplicar_telemetria(self, telemetria: Dict[str, float]):
+        """Aplica datos reales provenientes de sensores externos (Modbus/OPC UA/MQTT)."""
+        if self.modo != "gemelo":
+            return
+
         for camara in self.camaras:
-            camara.tick(dt)
+            if camara.nombre in telemetria:
+                camara.temperatura_actual = telemetria[camara.nombre]
 
     def estado_global(self) -> List[dict]:
         return [c.estado() for c in self.camaras]
-
-if __name__ == "__main__":
-    print("--- Simulador Frigorífico: 5 Cámaras Principales ---")
-    simulador = FrigorificoSimulator()
-
-    print("Simulando primeros 15 minutos (1 tick = 1 minuto simulado)...")
-    for minuto in range(1, 16):
-        # Eventos aleatorios
-        if minuto == 5:
-            print("\n>> [EVENTO] Comienza el turno de desposte (abren puertas).")
-            simulador.sala_desposte.puerta_abierta = True
-            simulador.camara_oreo.puerta_abierta = True
-
-        if minuto == 10:
-            print("\n>> [EVENTO] Se cierra la cámara de oreo.")
-            simulador.camara_oreo.puerta_abierta = False
-
-        simulador.tick()
-        estados = simulador.estado_global()
-
-        # Mostrar resumen en línea
-        resumen = " | ".join([f"{e['nombre'][:4]}: {e['temp_actual']}°C" for e in estados])
-        print(f"Min {minuto:02d} -> {resumen}")
-        time.sleep(0.2)
