@@ -18,7 +18,11 @@ El sistema está compuesto por las siguientes piezas clave, todas contenidas en 
     *   **Simulador:** El sistema funciona de manera puramente teórica, ideal para planeamiento y análisis ("What-if").
     *   **Gemelo Digital:** El sistema se "conecta" (simuladamente) a la planta real. Empieza a recibir datos de sensores (con ruido) a través de los protocolos industriales.
 2.  **Detección de Fallas por Divergencia:** En el modo "Gemelo", el sistema calcula y muestra en paralelo el "Modelo Teórico" (termodinámica pura) y la "Temperatura del Sensor (Real)". Si la diferencia entre ambos supera los 3°C, el sistema infiere una anomalía física (ej. fuga de gas, falla de compresor) y lanza una alerta visual.
-3.  **Consola SCADA:** Permite enviar comandos a los actuadores de la planta (ej. abrir/cerrar puertas) utilizando los protocolos de comunicación configurados.
+3.  **Consola SCADA y Control de Estado:** Permite enviar comandos a los actuadores y PLCs de la planta a través de los protocolos de comunicación configurados. Los estados de las cámaras (transmitidos y controlables vía comunicación industrial) se reflejan visualmente en el título de cada cámara:
+    *   **Gris:** Cámara Apagada (Power OFF).
+    *   **Azul:** Cámara Encendida en modo Automático (termostato activo).
+    *   **Amarillo:** Cámara Encendida en modo Manual (operador controla el compresor).
+    *   **Rojo:** Falla activa (ya sea una falla de hardware reportada por el PLC, o una falla inferida por divergencia térmica).
 4.  **Trazabilidad:** Permite ingresar tropas de carne al sistema, lo cual afecta la carga térmica de las cámaras correspondientes.
 
 ## Almacenamiento de Datos

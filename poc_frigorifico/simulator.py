@@ -16,12 +16,17 @@ class CamaraFrio:
         self.compresor_encendido = True
         self.puerta_abierta = False
 
+        # Nuevos estados de control
+        self.power_on = True # True = Encendida, False = Apagada
+        self.control_mode = "AUTO" # "AUTO" o "MANUAL"
+        self.falla_plc = False # Falla reportada por el PLC (hardware)
+
         # Constantes térmicas
         self.aislamiento_k = aislamiento_k
         self.poder_enfriamiento = poder_enfriamiento
         self.temp_ambiente = 25.0
 
-        self.falla_detectada = False
+        self.falla_detectada = False # Falla por divergencia física (Gemelo)
 
     def _calcular_delta_temp(self, temp_base: float, dt: float) -> float:
         """Calcula el cambio de temperatura basado en las leyes de la termodinámica."""
@@ -50,10 +55,17 @@ class CamaraFrio:
         # (En modo gemelo, self.temperatura_actual se actualiza desde afuera en aplicar_telemetria)
 
         # 3. Termostato (control local)
-        if self.temperatura_actual > self.temp_objetivo + 1.0:
-            self.compresor_encendido = True
-        elif self.temperatura_actual <= self.temp_objetivo:
-            self.compresor_encendido = False
+        if not self.power_on or self.falla_plc:
+            # Si está apagada o hay falla de hardware, no puede prender el compresor en auto
+            if self.control_mode == "AUTO":
+                self.compresor_encendido = False
+        else:
+            if self.control_mode == "AUTO":
+                if self.temperatura_actual > self.temp_objetivo + 1.0:
+                    self.compresor_encendido = True
+                elif self.temperatura_actual <= self.temp_objetivo:
+                    self.compresor_encendido = False
+            # Si está en MANUAL, el estado del compresor se cambia explícitamente desde afuera
 
         # 4. Detección de Fallas (Magia del Gemelo Digital)
         # Si la realidad difiere de la teoría en más de 3°C, hay un problema (ej. motor roto, sensor roto, fuga)
@@ -70,7 +82,10 @@ class CamaraFrio:
             "temp_objetivo": self.temp_objetivo,
             "compresor": "ON" if self.compresor_encendido else "OFF",
             "puerta": "ABIERTA" if self.puerta_abierta else "CERRADA",
-            "falla": self.falla_detectada
+            "power_on": self.power_on,
+            "control_mode": self.control_mode,
+            "falla_plc": self.falla_plc,
+            "falla_divergencia": self.falla_detectada
         }
 
 class FrigorificoSimulator:

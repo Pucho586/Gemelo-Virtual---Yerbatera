@@ -98,8 +98,14 @@
                 fetchData();
             };
 
-            const sendIndustrialCommand = async (protocol, idx, isAbierta) => {
-                const accion = isAbierta ? "cerrar_puerta" : "abrir_puerta";
+            const sendIndustrialCommand = async (protocol, idx, accion_type) => {
+                let accion = "";
+                if (accion_type === "puerta_abrir") accion = "abrir_puerta";
+                if (accion_type === "puerta_cerrar") accion = "cerrar_puerta";
+                if (accion_type === "toggle_power") accion = "toggle_power";
+                if (accion_type === "toggle_mode") accion = "toggle_mode";
+                if (accion_type === "toggle_plc") accion = "toggle_falla_plc";
+
                 try {
                     const res = await fetch('/api/comms/send', {
                         method: 'POST',
@@ -156,11 +162,37 @@
                                 )}
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
-                                    {camaras.map((c, idx) => (
-                                        <div key={idx} className={`bg-white rounded-lg shadow-md p-6 border-t-4 ${c.falla ? 'border-red-500 bg-red-50' : 'border-blue-500'}`}>
-                                            <div className="flex justify-between">
-                                                <h2 className="text-xl font-semibold mb-2">{c.nombre}</h2>
-                                                {c.falla && <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded animate-pulse">¡FALLA DETECTADA!</span>}
+                                    {camaras.map((c, idx) => {
+                                        let titleColor = "text-gray-800"; // Apagada
+                                        if (c.power_on) {
+                                            if (c.falla_plc || c.falla_divergencia) {
+                                                titleColor = "text-red-600";
+                                            } else if (c.control_mode === "MANUAL") {
+                                                titleColor = "text-yellow-600";
+                                            } else {
+                                                titleColor = "text-blue-600"; // AUTO
+                                            }
+                                        }
+
+                                        let borderColor = "border-gray-500";
+                                        if (c.power_on) {
+                                            if (c.falla_plc || c.falla_divergencia) {
+                                                borderColor = "border-red-500";
+                                            } else if (c.control_mode === "MANUAL") {
+                                                borderColor = "border-yellow-500";
+                                            } else {
+                                                borderColor = "border-blue-500";
+                                            }
+                                        }
+
+                                        return (
+                                        <div key={idx} className={`bg-white rounded-lg shadow-md p-6 border-t-4 ${borderColor} ${c.falla_divergencia || c.falla_plc ? 'bg-red-50' : ''}`}>
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h2 className={`text-xl font-bold ${titleColor}`}>{c.nombre}</h2>
+                                                <div className="flex flex-col gap-1 items-end">
+                                                    {c.falla_divergencia && <span className="bg-red-500 text-white text-xs font-bold px-2 py-1 rounded animate-pulse">FALLA DIVERGENCIA</span>}
+                                                    {c.falla_plc && <span className="bg-red-700 text-white text-xs font-bold px-2 py-1 rounded">FALLA PLC</span>}
+                                                </div>
                                             </div>
                                             <div className="flex justify-between items-end mb-4">
                                                 <div>
@@ -174,21 +206,29 @@
                                                     <p className="text-lg font-medium text-blue-600">{c.temp_teorica}°C</p>
                                                 </div>
                                             </div>
-                                            <div className="flex gap-2 mb-4">
+                                            <div className="flex flex-wrap gap-2 mb-4">
                                                 <span className={`px-2 py-1 text-xs font-bold rounded ${c.compresor === 'ON' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}>
-                                                    COMPRESOR: {c.compresor}
+                                                    COMP: {c.compresor}
                                                 </span>
                                                 <span className={`px-2 py-1 text-xs font-bold rounded ${c.puerta === 'ABIERTA' ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}>
                                                     PUERTA: {c.puerta}
                                                 </span>
+                                                <span className={`px-2 py-1 text-xs font-bold rounded ${c.power_on ? 'bg-green-100 text-green-800' : 'bg-gray-200 text-gray-600'}`}>
+                                                    PWR: {c.power_on ? 'ON' : 'OFF'}
+                                                </span>
+                                                <span className={`px-2 py-1 text-xs font-bold rounded ${c.control_mode === 'AUTO' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                    MODO: {c.control_mode}
+                                                </span>
                                             </div>
                                             {modo === 'simulador' && (
-                                                <button onClick={() => togglePuerta(idx, c.puerta === 'ABIERTA')} className="w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded">
-                                                    {c.puerta === 'ABIERTA' ? 'Cerrar Puerta' : 'Abrir Puerta'}
-                                                </button>
+                                                <div className="flex flex-col gap-2">
+                                                    <button onClick={() => togglePuerta(idx, c.puerta === 'ABIERTA')} className="w-full bg-gray-800 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded text-sm">
+                                                        {c.puerta === 'ABIERTA' ? 'Cerrar Puerta' : 'Abrir Puerta'}
+                                                    </button>
+                                                </div>
                                             )}
                                         </div>
-                                    ))}
+                                    )})}
                                 </div>
 
                                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -295,12 +335,38 @@
 
                                         <div className="space-y-4">
                                             {camaras.map((c, idx) => (
-                                                <div key={idx} className="flex items-center justify-between bg-gray-800 p-3 rounded">
-                                                    <span>{c.nombre} (Puerta: {c.puerta})</span>
-                                                    <div className="flex gap-2">
-                                                        <button onClick={() => sendIndustrialCommand('Modbus', idx, c.puerta==='ABIERTA')} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-sm font-bold">Vía MODBUS</button>
-                                                        <button onClick={() => sendIndustrialCommand('OPCUA', idx, c.puerta==='ABIERTA')} className="bg-indigo-600 hover:bg-indigo-500 px-2 py-1 rounded text-sm font-bold">Vía OPC UA</button>
-                                                        <button onClick={() => sendIndustrialCommand('MQTT', idx, c.puerta==='ABIERTA')} className="bg-teal-600 hover:bg-teal-500 px-2 py-1 rounded text-sm font-bold">Vía MQTT</button>
+                                                <div key={idx} className="flex flex-col bg-gray-800 p-3 rounded gap-3">
+                                                    <div className="flex justify-between items-center border-b border-gray-700 pb-2">
+                                                        <span className="font-bold">{c.nombre}</span>
+                                                        <span className="text-xs text-gray-400">Seleccionar Acción y Protocolo:</span>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-4 gap-2">
+                                                        <div className="col-span-1 text-sm flex items-center">Puerta ({c.puerta})</div>
+                                                        <button onClick={() => sendIndustrialCommand('Modbus', idx, c.puerta==='ABIERTA' ? 'puerta_cerrar' : 'puerta_abrir')} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs font-bold">Vía MODBUS</button>
+                                                        <button onClick={() => sendIndustrialCommand('OPCUA', idx, c.puerta==='ABIERTA' ? 'puerta_cerrar' : 'puerta_abrir')} className="bg-indigo-600 hover:bg-indigo-500 px-2 py-1 rounded text-xs font-bold">Vía OPC UA</button>
+                                                        <button onClick={() => sendIndustrialCommand('MQTT', idx, c.puerta==='ABIERTA' ? 'puerta_cerrar' : 'puerta_abrir')} className="bg-teal-600 hover:bg-teal-500 px-2 py-1 rounded text-xs font-bold">Vía MQTT</button>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-4 gap-2">
+                                                        <div className="col-span-1 text-sm flex items-center">Power ({c.power_on ? 'ON' : 'OFF'})</div>
+                                                        <button onClick={() => sendIndustrialCommand('Modbus', idx, 'toggle_power')} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs font-bold">Vía MODBUS</button>
+                                                        <button onClick={() => sendIndustrialCommand('OPCUA', idx, 'toggle_power')} className="bg-indigo-600 hover:bg-indigo-500 px-2 py-1 rounded text-xs font-bold">Vía OPC UA</button>
+                                                        <button onClick={() => sendIndustrialCommand('MQTT', idx, 'toggle_power')} className="bg-teal-600 hover:bg-teal-500 px-2 py-1 rounded text-xs font-bold">Vía MQTT</button>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-4 gap-2">
+                                                        <div className="col-span-1 text-sm flex items-center">Modo ({c.control_mode})</div>
+                                                        <button onClick={() => sendIndustrialCommand('Modbus', idx, 'toggle_mode')} className="bg-blue-600 hover:bg-blue-500 px-2 py-1 rounded text-xs font-bold">Vía MODBUS</button>
+                                                        <button onClick={() => sendIndustrialCommand('OPCUA', idx, 'toggle_mode')} className="bg-indigo-600 hover:bg-indigo-500 px-2 py-1 rounded text-xs font-bold">Vía OPC UA</button>
+                                                        <button onClick={() => sendIndustrialCommand('MQTT', idx, 'toggle_mode')} className="bg-teal-600 hover:bg-teal-500 px-2 py-1 rounded text-xs font-bold">Vía MQTT</button>
+                                                    </div>
+
+                                                    <div className="grid grid-cols-4 gap-2">
+                                                        <div className="col-span-1 text-sm flex items-center">Falla PLC ({c.falla_plc ? 'ACTIVA' : 'OK'})</div>
+                                                        <button onClick={() => sendIndustrialCommand('Modbus', idx, 'toggle_plc')} className="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-xs font-bold">Vía MODBUS</button>
+                                                        <button onClick={() => sendIndustrialCommand('OPCUA', idx, 'toggle_plc')} className="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-xs font-bold">Vía OPC UA</button>
+                                                        <button onClick={() => sendIndustrialCommand('MQTT', idx, 'toggle_plc')} className="bg-red-600 hover:bg-red-500 px-2 py-1 rounded text-xs font-bold">Vía MQTT</button>
                                                     </div>
                                                 </div>
                                             ))}

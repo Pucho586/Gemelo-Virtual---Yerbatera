@@ -75,7 +75,7 @@ class TempObjPatch(BaseModel):
 class CommsCommand(BaseModel):
     protocolo: str
     camara_idx: int
-    accion: str # ej: "abrir_puerta", "cerrar_puerta"
+    accion: str # ej: "abrir_puerta", "cerrar_puerta", "toggle_power", "toggle_mode", "toggle_falla_plc"
 
 class FallaPatch(BaseModel):
     falla_activa: bool
@@ -146,6 +146,12 @@ async def send_industrial_command(cmd: CommsCommand):
         camara.puerta_abierta = True
     elif cmd.accion == "cerrar_puerta":
         camara.puerta_abierta = False
+    elif cmd.accion == "toggle_power":
+        camara.power_on = not camara.power_on
+    elif cmd.accion == "toggle_mode":
+        camara.control_mode = "MANUAL" if camara.control_mode == "AUTO" else "AUTO"
+    elif cmd.accion == "toggle_falla_plc":
+        camara.falla_plc = not camara.falla_plc
 
     return {"ok": True, "mensaje": f"Comando {cmd.accion} enviado exitosamente a {camara.nombre} vía {cmd.protocolo}"}
 
