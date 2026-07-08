@@ -30,7 +30,7 @@
 | Supervisor | 4+ | `supervisord --version` |
 | Mosquitto (MQTT broker) | 2+ (opcional, sólo si querés Node-RED ↔ gemelo) | `mosquitto -h` |
 
-> **Nota**: En la plataforma Emergent todo esto **ya está instalado** y supervisado. Los comandos manuales sólo aplican a instalaciones on-premise.
+> **Nota**: Los comandos manuales de esta guía aplican a instalaciones on-premise. Si usás una imagen/contenedor con supervisor ya configurado, los servicios arrancan solos.
 
 ---
 
@@ -122,7 +122,9 @@ sudo supervisorctl start all
 MONGO_URL=mongodb://localhost:27017
 DB_NAME=yerba_twin
 CORS_ORIGINS=*
-EMERGENT_LLM_KEY=sk-emergent-xxxxxxxxxxxx
+# Claves de IA (según el proveedor que elijas en Configuración → IA):
+ANTHROPIC_API_KEY=sk-ant-xxxxxxxxxxxx   # para Claude
+GEMINI_API_KEY=xxxxxxxxxxxx             # para Google Gemini
 JWT_SECRET=cambiame-en-produccion
 ADMIN_RECOVERY_CODE=YERBA-RECOVER-2026
 ```
@@ -197,7 +199,7 @@ ls /app/backend/data/yerba_history_*.csv
 | Login devuelve `401` con credenciales correctas | Borrá cookies del navegador; el JWT puede estar caducado. |
 | Modbus / OPC UA badges en rojo | Verificá `backend/.env` que no haya seteo conflictivo; revisá puerto libre con `ss -tlnp \| grep 5020`. |
 | Open-Meteo 429 / weather rojo | Es el rate limit público. El gemelo cambia automáticamente a fallback sintético estacional. No requiere acción. |
-| IA responde "Falta EMERGENT_LLM_KEY" | Recargá el `.env`, reiniciá backend, y confirmá `EMERGENT_LLM_KEY` en `backend/.env`. |
+| IA responde "Falta ANTHROPIC_API_KEY" o "GEMINI_API_KEY" | Recargá el `.env`, reiniciá backend, y confirmá la clave del proveedor elegido (`ANTHROPIC_API_KEY` para Claude, `GEMINI_API_KEY` para Gemini) en `backend/.env`. |
 | MQTT no recibe `yerba/cmd/*` | Verificá broker accesible: `mosquitto_sub -h <broker> -t 'yerba/#' -v`. |
 
 Para casos no listados → `manual_tecnico.md` capítulo 14.

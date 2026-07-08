@@ -1,7 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Card, CardHeader, Btn } from './UI';
 import { api } from '../lib/api';
-import { Sparkle, ArrowClockwise, Warning, ChartLineUp, PaperPlaneTilt } from '@phosphor-icons/react';
+import { useAuth, isAdmin } from '../lib/auth';
+import { Sparkle, ArrowClockwise, ChartLineUp, PaperPlaneTilt, Robot, Cpu } from '@phosphor-icons/react';
+
+const PROVIDER_META = {
+  claude: { label: 'Claude', Icon: Cpu },
+  gemini: { label: 'Gemini', Icon: Robot },
+};
 
 const SESSION_KEY = 'yerba_ai_session_id';
 
@@ -15,6 +21,8 @@ function getSessionId() {
 }
 
 export default function AIPanel() {
+  const { user } = useAuth();
+  const admin = isAdmin(user);
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState('');
   const [sending, setSending] = useState(false);
@@ -24,13 +32,24 @@ export default function AIPanel() {
   const [loadingAnom, setLoadingAnom] = useState(false);
   const [forecast, setForecast] = useState(null);
   const [loadingFc, setLoadingFc] = useState(false);
+  const [aiCfg, setAiCfg] = useState(null);
   const scrollRef = useRef(null);
+
+  const provider = aiCfg?.provider || 'claude';
+  const providerLabel = PROVIDER_META[provider]?.label || provider;
 
   useEffect(() => {
     api.aiHistory(sessionId).then(setMessages).catch(() => {});
+    api.aiGetProvider().then(setAiCfg).catch(() => {});
     refreshAnomalies(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const switchProvider = async (p) => {
+    if (!admin || p === provider) return;
+    try { setAiCfg(await api.aiSetProvider(p)); }
+    catch (e) { alert(e?.response?.data?.detail || 'Error'); }
+  };
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -84,10 +103,41 @@ export default function AIPanel() {
 
   return (
     <div className="space-y-px">
+      {/* Selector de proveedor de IA */}
+      <Card className="p-4" testid="ai-provider-card">
+        <div className="flex items-center justify-between flex-wrap gap-3">
+          <div>
+            <div className="text-[11px] font-mono uppercase tracking-wider text-slate-500">Motor de IA</div>
+            <div className="text-sm text-slate-300">Elegí el proveedor para comparar respuestas</div>
+          </div>
+          <div className="flex items-center gap-2">
+            {(aiCfg?.providers || [{ id: 'claude' }, { id: 'gemini' }]).map((p) => {
+              const meta = PROVIDER_META[p.id] || { label: p.id, Icon: Robot };
+              const on = provider === p.id;
+              const noKey = p.key_present === false;
+              return (
+                <button
+                  key={p.id}
+                  data-testid={`ai-provider-${p.id}`}
+                  onClick={() => switchProvider(p.id)}
+                  disabled={!admin}
+                  title={noKey ? `Falta ${p.key_env} en el backend` : (admin ? '' : 'Requiere admin')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-mono border transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${on ? 'bg-amber-300/10 text-amber-200 border-amber-300/40' : 'text-slate-400 border-[#232A26] hover:text-slate-200'}`}
+                >
+                  <meta.Icon size={13} weight="duotone" /> {meta.label}
+                  {p.model && <span className="text-slate-500 hidden sm:inline">· {p.model}</span>}
+                  {noKey && <span className="text-red-400">⚠</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </Card>
+
       <Card className="p-0" testid="ai-anomalies-card">
         <CardHeader
           title="Anomalías detectadas"
-          subtitle="Reglas determinísticas + diagnóstico con Gemini 3 Flash"
+          subtitle={`Reglas determinísticas + diagnóstico con ${providerLabel}`}
           action={
             <div className="flex items-center gap-2">
               <Btn testid="ai-refresh-anomalies" variant="secondary" onClick={() => refreshAnomalies(true)} disabled={loadingAnom}>
@@ -146,7 +196,7 @@ export default function AIPanel() {
               </div>
             </div>
           ))}
-          {sending && <div className="text-xs font-mono text-amber-300/70" data-testid="ai-thinking">Gemini está pensando...</div>}
+          {sending && <div className="text-xs font-mono text-amber-300/70" data-testid="ai-thinking">{providerLabel} está pensando...</div>}
         </div>
         <div className="border-t p-3 flex items-center gap-2" style={{ borderColor: 'var(--border)' }}>
           <input

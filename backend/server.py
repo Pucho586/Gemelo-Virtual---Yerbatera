@@ -201,6 +201,10 @@ class ProtocolToggle(BaseModel):
     enabled: bool
 
 
+class ProviderBody(BaseModel):
+    provider: str
+
+
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
@@ -581,6 +585,24 @@ async def ai_forecast(horizon: int = 30):
     rt = get_runtime()
     hist = rt.simulator.get_history(n=120)
     return rt.ai.forecast(hist, horizon_steps=horizon)
+
+
+@api.get("/ai/provider")
+async def ai_get_provider():
+    return get_runtime().ai.get_config()
+
+
+@api.post("/ai/provider")
+async def ai_set_provider(body: ProviderBody, request: Request, user=Depends(admin_only)):
+    rt = get_runtime()
+    try:
+        rt.ai.set_provider(body.provider)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    rt.update_config({"ai": {"provider": rt.ai.provider}})
+    await audit_service.log(user["username"], "set_ai_provider", {"provider": rt.ai.provider},
+                            ip=request.client.host if request.client else None)
+    return rt.ai.get_config()
 
 
 # ---------- RECETAS ----------
