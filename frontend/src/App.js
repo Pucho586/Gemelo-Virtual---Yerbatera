@@ -3,7 +3,6 @@ import './App.css';
 import { useLiveState } from './lib/useLiveState';
 import { api } from './lib/api';
 import { AuthProvider, useAuth, isAdmin } from './lib/auth';
-import { StatusBadge, Btn } from './components/UI';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import ZapecadoView from './components/ZapecadoView';
@@ -50,6 +49,16 @@ const GROUPS = [
   { id: 'analisis', label: 'Análisis', Icon: ChartLineUp, tabs: ['ops', 'fase4', 'ia'] },
   { id: 'integracion', label: 'Integración', Icon: Plugs, tabs: ['protocolos', 'i40', 'config'] },
 ];
+
+function ConnDot({ on, disabled, label, testid }) {
+  const color = disabled ? 'text-slate-600' : on ? 'text-green-400' : 'text-red-400';
+  return (
+    <span className="inline-flex items-center gap-1.5" data-testid={testid} title={disabled ? `${label}: desactivado` : on ? `${label}: activo` : `${label}: sin conexión`}>
+      <span className={`${on && !disabled ? 'live-dot ' : ''}${color} text-[9px]`}>●</span>
+      <span className="font-mono text-[11px] tracking-wide text-slate-400">{label}</span>
+    </span>
+  );
+}
 
 function AuthedApp() {
   const { user, logout } = useAuth();
@@ -133,7 +142,7 @@ function AuthedApp() {
             </div>
             <div className="leading-tight">
               <div className="font-display text-sm font-semibold text-slate-100 tracking-tight">Gemelo Digital · Yerba Mate</div>
-              <div className="font-mono text-[10px] text-slate-500 tracking-wider uppercase">v2.1 · {user?.display}</div>
+              <div className="font-mono text-[10px] text-slate-500 tracking-wider uppercase">v2.4 · {user?.display}</div>
             </div>
           </div>
 
@@ -147,10 +156,13 @@ function AuthedApp() {
             >
               <mm.Icon size={13} weight="duotone" /> Modo {mm.label}
             </button>
-            <StatusBadge state={connected ? 'online' : 'warning'} label={connected ? 'WS' : 'POLL'} testid="conn-badge" />
-            <StatusBadge state={status?.modbus?.running ? 'online' : 'offline'} label="Modbus" testid="modbus-badge" />
-            <StatusBadge state={status?.mqtt?.running ? 'online' : 'offline'} label="MQTT" testid="mqtt-badge" />
-            <StatusBadge state={status?.opcua?.running ? 'online' : 'offline'} label="OPC UA" testid="opcua-badge" />
+            {/* Cluster de conexión agrupado: un solo bloque en vez de 4 badges sueltos */}
+            <div className="inline-flex items-center gap-3 px-2.5 py-1 border" style={{ borderColor: 'var(--border)' }} title="Estado de enlaces" data-testid="conn-cluster">
+              <ConnDot on={connected} label={connected ? 'WS' : 'POLL'} testid="conn-badge" />
+              <ConnDot on={status?.modbus?.running} disabled={status?.modbus?.disabled} label="MB" testid="modbus-badge" />
+              <ConnDot on={status?.mqtt?.running} disabled={status?.mqtt?.disabled} label="MQTT" testid="mqtt-badge" />
+              <ConnDot on={status?.opcua?.running} disabled={status?.opcua?.disabled} label="OPC" testid="opcua-badge" />
+            </div>
             <WeatherControl ambient={state?.ambient} weatherStatus={status?.weather} />
             {activeAlarms > 0 && (
               <button onClick={() => setTab('ops')} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-mono uppercase tracking-wider border bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25 transition-colors" data-testid="alarms-badge-header">
