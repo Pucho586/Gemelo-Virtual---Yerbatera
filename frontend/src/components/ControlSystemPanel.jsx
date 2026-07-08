@@ -21,13 +21,14 @@ const MODES = [
 export default function ControlSystemPanel({
   stageLabel, mvLabel, spLabel, spValue, spUnit = '',
   control_mode = 'manual', pid = {}, onoff = {}, onApply, admin = true, testidBase = 'ctrl',
+  applyKeys = { mode: 'control_mode', pid: 'pid', onoff: 'onoff' },
 }) {
   const mode = control_mode || 'manual';
   const meta = MODES.find(m => m.id === mode) || MODES[0];
 
-  const setMode = (id) => { if (admin) onApply({ control_mode: id }); };
-  const patchOnoff = (k, v) => onApply({ onoff: { [k]: v } });
-  const patchPid = (k, v) => onApply({ pid: { [k]: v } });
+  const setMode = (id) => { if (admin) onApply({ [applyKeys.mode]: id }); };
+  const patchOnoff = (k, v) => onApply({ [applyKeys.onoff]: { [k]: v } });
+  const patchPid = (k, v) => onApply({ [applyKeys.pid]: { [k]: v } });
 
   return (
     <Card className="p-5" testid={`${testidBase}-card`}>

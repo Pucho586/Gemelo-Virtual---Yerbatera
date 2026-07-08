@@ -3,13 +3,15 @@ import { Card, CardHeader, Metric, Toggle, NumberInput, SectionTitle } from './U
 import { CamarasChart, flatten } from './Charts';
 import { CamaraMimic, CamaraPid } from './Mimics';
 import FaultPanel from './FaultPanel';
-import PidPanel from './PidPanel';
+import ControlSystemPanel from './ControlSystemPanel';
 import { useLocalSync } from '../lib/useLocalSync';
 import { api } from '../lib/api';
 import { useAuth, isAdmin } from '../lib/auth';
 import { Cloud, Drop, Thermometer, Fan, Plus, Minus } from '@phosphor-icons/react';
 
 function ChamberCard({ cam, idx, mimicStyle }) {
+  const { user } = useAuth();
+  const admin = isAdmin(user);
   const [carga, setCarga] = useLocalSync(cam.carga_kg);
   const [vent, setVent] = useLocalSync(cam.ventilador);
   const [tObj, setTObj] = useLocalSync(cam.temperatura_obj);
@@ -105,12 +107,14 @@ function ChamberCard({ cam, idx, mimicStyle }) {
 
       {/* === PID + FALLAS (todo el ancho) === */}
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-px hair-grid">
-        <PidPanel
-          title="PID Temperatura cámara · ajusta vapor"
-          pid={cam.pid_t}
-          manipulada="caudal vapor (kg/h)"
-          onApply={(patch) => apply({ pid_t: patch })}
-          testidBase={`cam-${idx}-pid-t`}
+        <ControlSystemPanel
+          stageLabel={cam.nombre}
+          mvLabel="caudal de vapor (kg/h)"
+          spLabel="temperatura" spValue={cam.temperatura_obj} spUnit="°C"
+          control_mode={cam.control_mode}
+          pid={cam.pid_t || {}} onoff={cam.onoff || {}}
+          onApply={apply} admin={admin} testidBase={`cam-${idx}-ctrl`}
+          applyKeys={{ mode: 'control_mode', pid: 'pid_t', onoff: 'onoff' }}
         />
         <FaultPanel
           title="Inyección de fallas"

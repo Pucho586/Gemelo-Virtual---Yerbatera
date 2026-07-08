@@ -172,8 +172,12 @@ class SecadoPatch(BaseModel):
     tau_t: Optional[float] = None
     falla_ventilador: Optional[bool] = None
     falla_serpentin: Optional[bool] = None
+    control_mode_t: Optional[str] = None
+    control_mode_h: Optional[str] = None
     pid_t: Optional[PidPatch] = None
     pid_h: Optional[PidPatch] = None
+    onoff_t: Optional[OnOffPatch] = None
+    onoff_h: Optional[OnOffPatch] = None
 
 
 class CanchadoPatch(BaseModel):
@@ -183,7 +187,9 @@ class CanchadoPatch(BaseModel):
     tau_p: Optional[float] = None
     falla_motor: Optional[bool] = None
     rodamiento_caliente: Optional[bool] = None
+    control_mode: Optional[str] = None
     pid: Optional[PidPatch] = None
+    onoff: Optional[OnOffPatch] = None
 
 
 class CamaraPatch(BaseModel):
@@ -201,7 +207,9 @@ class CamaraPatch(BaseModel):
     falla_ventilador: Optional[bool] = None
     fuga_vapor: Optional[bool] = None
     puerta_abierta: Optional[bool] = None
+    control_mode: Optional[str] = None
     pid_t: Optional[PidPatch] = None
+    onoff: Optional[OnOffPatch] = None
 
 
 class CamarasCountBody(BaseModel):

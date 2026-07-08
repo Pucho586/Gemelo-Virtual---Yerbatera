@@ -4,12 +4,15 @@ import { SecadoChart, flatten } from './Charts';
 import { SecadoMimic, SecadoPid } from './Mimics';
 import StageBlock from './StageBlock';
 import FaultPanel from './FaultPanel';
-import PidPanel from './PidPanel';
+import ControlSystemPanel from './ControlSystemPanel';
 import { useLocalSync } from '../lib/useLocalSync';
+import { useAuth, isAdmin } from '../lib/auth';
 import { api } from '../lib/api';
 import { Drop } from '@phosphor-icons/react';
 
 export default function SecadoView({ state, series, mimicStyle = 'svg' }) {
+  const { user } = useAuth();
+  const admin = isAdmin(user);
   const s = state?.secado;
   const ambient = state?.ambient;
   const faults = s?.faults || {};
@@ -89,20 +92,24 @@ export default function SecadoView({ state, series, mimicStyle = 'svg' }) {
         <StageBlock stage="secado" state={state} />
       </div>
 
-      <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-px hair-grid">
-        <PidPanel
-          title="PID Temperatura · ajusta calefactor"
-          pid={s?.pid_t}
-          manipulada="posición calefactor (%)"
-          onApply={(patch) => apply({ pid_t: patch })}
-          testidBase="sec-pid-t"
+      <div className="lg:col-span-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <ControlSystemPanel
+          stageLabel="Secado · Temperatura"
+          mvLabel="posición del calefactor (%)"
+          spLabel="temperatura" spValue={s?.temperatura_obj} spUnit="°C"
+          control_mode={s?.control_mode_t}
+          pid={s?.pid_t || {}} onoff={s?.onoff_t || {}}
+          onApply={apply} admin={admin} testidBase="sec-ctrl-t"
+          applyKeys={{ mode: 'control_mode_t', pid: 'pid_t', onoff: 'onoff_t' }}
         />
-        <PidPanel
-          title="PID Humedad · ajusta vel. aire"
-          pid={s?.pid_h}
-          manipulada="vel. aire (m/s)"
-          onApply={(patch) => apply({ pid_h: patch })}
-          testidBase="sec-pid-h"
+        <ControlSystemPanel
+          stageLabel="Secado · Humedad"
+          mvLabel="velocidad de aire (m/s)"
+          spLabel="humedad" spValue={s?.humedad_obj} spUnit="%"
+          control_mode={s?.control_mode_h}
+          pid={s?.pid_h || {}} onoff={s?.onoff_h || {}}
+          onApply={apply} admin={admin} testidBase="sec-ctrl-h"
+          applyKeys={{ mode: 'control_mode_h', pid: 'pid_h', onoff: 'onoff_h' }}
         />
       </div>
 

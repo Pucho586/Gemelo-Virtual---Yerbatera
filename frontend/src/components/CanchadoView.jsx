@@ -4,12 +4,15 @@ import { CanchadoChart, flatten } from './Charts';
 import { CanchadoMimic, CanchadoPid } from './Mimics';
 import StageBlock from './StageBlock';
 import FaultPanel from './FaultPanel';
-import PidPanel from './PidPanel';
+import ControlSystemPanel from './ControlSystemPanel';
 import { useLocalSync } from '../lib/useLocalSync';
+import { useAuth, isAdmin } from '../lib/auth';
 import { api } from '../lib/api';
 import { Cube } from '@phosphor-icons/react';
 
 export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
+  const { user } = useAuth();
+  const admin = isAdmin(user);
   const c = state?.canchado;
   const faults = c?.faults || {};
   const [rpm, setRpm] = useLocalSync(c?.velocidad_molino ?? 60);
@@ -80,12 +83,13 @@ export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
       </div>
 
       <div className="lg:col-span-3">
-        <PidPanel
-          title="PID Canchado · ajusta rpm"
-          pid={c?.pid}
-          manipulada="vel. molino (rpm)"
-          onApply={(patch) => apply({ pid: patch })}
-          testidBase="can-pid"
+        <ControlSystemPanel
+          stageLabel="Canchado"
+          mvLabel="velocidad del molino (rpm)"
+          spLabel="grosor" spValue={c?.tamano_particula_obj} spUnit="mm"
+          control_mode={c?.control_mode}
+          pid={c?.pid || {}} onoff={c?.onoff || {}}
+          onApply={apply} admin={admin} testidBase="can-ctrl"
         />
       </div>
 
