@@ -39,6 +39,15 @@ const TABS = [
   { id: 'ia', label: 'IA · Gemini', Icon: Sparkle, role: 'any' },
   { id: 'config', label: 'Configuración', Icon: Gear, role: 'admin' },
 ];
+const TAB_META = Object.fromEntries(TABS.map(t => [t.id, t]));
+
+// Navegación de dos niveles: 4 grupos temáticos en vez de 13 tabs sueltas.
+const GROUPS = [
+  { id: 'operacion', label: 'Operación', Icon: House, tabs: ['dashboard', 'massflow', 'recetas', 'lotes'] },
+  { id: 'proceso', label: 'Proceso', Icon: Fire, tabs: ['zapecado', 'secado', 'canchado', 'camaras'] },
+  { id: 'analisis', label: 'Análisis', Icon: ChartLineUp, tabs: ['ops', 'fase4', 'ia'] },
+  { id: 'integracion', label: 'Integración', Icon: Plugs, tabs: ['i40', 'config'] },
+];
 
 function AuthedApp() {
   const { user, logout } = useAuth();
@@ -104,7 +113,13 @@ function AuthedApp() {
     try { localStorage.setItem('yerba_mimic', next); } catch (e) { /* ignore */ }
   };
 
-  const visibleTabs = TABS.filter(t => t.role === 'any' || isAdmin(user));
+  const canSee = (id) => { const t = TAB_META[id]; return t && (t.role === 'any' || isAdmin(user)); };
+  const visibleGroups = GROUPS
+    .map(g => ({ ...g, tabs: g.tabs.filter(canSee) }))
+    .filter(g => g.tabs.length > 0);
+  const activeGroup = visibleGroups.find(g => g.tabs.includes(tab)) || visibleGroups[0];
+  const subTabs = (activeGroup?.tabs || []).map(id => TAB_META[id]);
+  const selectGroup = (g) => { if (!g.tabs.includes(tab)) setTab(g.tabs[0]); };
 
   return (
     <div className="App min-h-screen" style={{ background: 'var(--bg)' }}>
@@ -156,20 +171,41 @@ function AuthedApp() {
           </div>
         </div>
 
-        <nav className="max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-6 flex items-center overflow-x-auto" data-testid="tabs-nav">
-          {visibleTabs.map(({ id, label, Icon }) => (
+        {/* Nivel 1: grupos temáticos */}
+        <nav className="max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-6 flex items-center gap-1 overflow-x-auto" data-testid="groups-nav">
+          {visibleGroups.map((g) => {
+            const on = activeGroup?.id === g.id;
+            return (
+              <button
+                key={g.id}
+                data-testid={`group-${g.id}`}
+                onClick={() => selectGroup(g)}
+                className={`px-4 py-3 text-sm font-semibold tracking-tight inline-flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${on ? 'border-amber-300 text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+              >
+                <g.Icon size={16} weight={on ? 'fill' : 'regular'} />
+                {g.label}
+              </button>
+            );
+          })}
+        </nav>
+      </header>
+
+      {/* Nivel 2: vistas dentro del grupo activo */}
+      <div className="border-b" style={{ borderColor: 'var(--border)', background: 'var(--bg)' }}>
+        <nav className="max-w-[1920px] mx-auto px-2 sm:px-4 lg:px-6 flex items-center gap-1 overflow-x-auto" data-testid="tabs-nav">
+          {subTabs.map(({ id, label, Icon }) => (
             <button
               key={id}
               data-testid={`tab-${id}`}
               onClick={() => setTab(id)}
-              className={`px-4 py-2.5 text-sm font-medium tracking-tight inline-flex items-center gap-2 border-b-2 transition-colors whitespace-nowrap ${tab === id ? 'border-amber-300 text-slate-100' : 'border-transparent text-slate-400 hover:text-slate-200'}`}
+              className={`px-3.5 py-2 text-[13px] font-medium tracking-tight inline-flex items-center gap-1.5 rounded-md my-1.5 transition-colors whitespace-nowrap ${tab === id ? 'bg-amber-300/10 text-amber-200' : 'text-slate-400 hover:text-slate-200 hover:bg-white/5'}`}
             >
-              <Icon size={15} weight={tab === id ? 'fill' : 'regular'} />
+              <Icon size={14} weight={tab === id ? 'fill' : 'regular'} />
               {label}
             </button>
           ))}
         </nav>
-      </header>
+      </div>
 
       {/* TABS PERSISTENTES: todas montadas, solo se oculta con CSS */}
       <main className="max-w-[1920px] mx-auto p-4 sm:p-6 lg:p-8" data-testid="main-content">
