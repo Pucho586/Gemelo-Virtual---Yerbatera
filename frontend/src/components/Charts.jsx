@@ -8,6 +8,7 @@ import {
   YAxis,
   Tooltip,
   ReferenceLine,
+  ReferenceArea,
   AreaChart,
   Area,
 } from 'recharts';
@@ -18,6 +19,8 @@ const COLORS = {
   co2: '#86EFAC',
   rpm: '#D8B4FE',
   ambient: '#FCD34D',
+  amber: '#FCD34D',
+  red: '#EF4444',
 };
 
 const axisProps = {
@@ -69,17 +72,22 @@ export function flatten(series) {
   }));
 }
 
+const SAFE = '#4ADE80';
+
 export function ZapecadoChart({ data, height = 220 }) {
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 10, right: 14, left: -10, bottom: 0 }}>
+        {/* Banda verde = rango seguro de operación */}
+        <ReferenceArea y1={0} y2={540} fill={SAFE} fillOpacity={0.06} />
         <CartesianGrid stroke="#232A26" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="t" {...axisProps} minTickGap={32} />
         <YAxis domain={[0, 700]} {...axisProps} unit="°" />
         <Tooltip contentStyle={tooltipStyle} />
-        <ReferenceLine y={600} stroke={COLORS.temp} strokeDasharray="4 4" label={{ value: 'Techo 600°C', position: 'right', fill: COLORS.temp, fontSize: 10, fontFamily: 'JetBrains Mono' }} />
-        <ReferenceLine y={450} stroke="#4ADE80" strokeDasharray="2 6" label={{ value: 'Setpoint', position: 'left', fill: '#4ADE80', fontSize: 10, fontFamily: 'JetBrains Mono' }} />
-        <Line isAnimationActive={false} type="monotone" dataKey="zap_t" stroke={COLORS.temp} strokeWidth={2} dot={false} name="Zapecado" />
+        <ReferenceLine y={580} stroke={COLORS.red} strokeDasharray="4 4" label={{ value: 'Crítico 580°', position: 'right', fill: COLORS.red, fontSize: 10, fontFamily: 'JetBrains Mono' }} />
+        <ReferenceLine y={540} stroke={COLORS.amber} strokeDasharray="4 4" label={{ value: 'Alerta 540°', position: 'right', fill: COLORS.amber, fontSize: 10, fontFamily: 'JetBrains Mono' }} />
+        <ReferenceLine y={450} stroke={SAFE} strokeDasharray="2 6" label={{ value: 'Objetivo', position: 'left', fill: SAFE, fontSize: 10, fontFamily: 'JetBrains Mono' }} />
+        <Line isAnimationActive={false} type="monotone" dataKey="zap_t" stroke={COLORS.temp} strokeWidth={2.5} dot={false} name="Zapecado" />
         <Line isAnimationActive={false} type="monotone" dataKey="ambient_t" stroke={COLORS.ambient} strokeWidth={1.5} dot={false} strokeDasharray="4 3" name="Ambiente" />
       </LineChart>
     </ResponsiveContainer>
@@ -95,8 +103,11 @@ export function SecadoChart({ data, height = 220 }) {
         <YAxis yAxisId="t" domain={[0, 130]} {...axisProps} unit="°" />
         <YAxis yAxisId="h" orientation="right" domain={[0, 100]} {...axisProps} unit="%" />
         <Tooltip contentStyle={tooltipStyle} />
-        <Line isAnimationActive={false} yAxisId="t" type="monotone" dataKey="sec_t" stroke={COLORS.temp} strokeWidth={2} dot={false} name="Temp" />
-        <Line isAnimationActive={false} yAxisId="h" type="monotone" dataKey="sec_h" stroke={COLORS.hum} strokeWidth={2} dot={false} name="Humedad" />
+        {/* Banda verde de humedad ideal 6–30% */}
+        <ReferenceArea yAxisId="h" y1={6} y2={30} fill={SAFE} fillOpacity={0.07} />
+        <ReferenceLine yAxisId="h" y={35} stroke={COLORS.amber} strokeDasharray="4 4" label={{ value: 'HR 35%', position: 'right', fill: COLORS.amber, fontSize: 10, fontFamily: 'JetBrains Mono' }} />
+        <Line isAnimationActive={false} yAxisId="t" type="monotone" dataKey="sec_t" stroke={COLORS.temp} strokeWidth={2.5} dot={false} name="Temp" />
+        <Line isAnimationActive={false} yAxisId="h" type="monotone" dataKey="sec_h" stroke={COLORS.hum} strokeWidth={2.5} dot={false} name="Humedad" />
         <Line isAnimationActive={false} yAxisId="t" type="monotone" dataKey="ambient_t" stroke={COLORS.ambient} strokeWidth={1} dot={false} strokeDasharray="3 3" name="Ambiente" />
       </LineChart>
     </ResponsiveContainer>
@@ -133,13 +144,19 @@ export function CamarasChart({ data, metric = 'temp', height = 220 }) {
   const colors = ['#FCA5A5', '#93C5FD', '#86EFAC', '#D8B4FE'];
   const unit = metric === 'temp' ? '°' : metric === 'hum' ? '%' : 'ppm';
   const domain = metric === 'co2' ? [0, 8000] : metric === 'temp' ? [0, 60] : [0, 100];
+  // Umbrales de alerta por métrica (coinciden con alarms.py)
+  const bands = metric === 'co2'
+    ? { safe: 4200, warn: 4200, bad: 5500 }
+    : metric === 'temp' ? { safe: 42, warn: 42, bad: 50 } : null;
   return (
     <ResponsiveContainer width="100%" height={height}>
       <LineChart data={data} margin={{ top: 10, right: 14, left: -10, bottom: 0 }}>
+        {bands && <ReferenceArea y1={0} y2={bands.safe} fill={SAFE} fillOpacity={0.06} />}
         <CartesianGrid stroke="#232A26" strokeDasharray="3 3" vertical={false} />
         <XAxis dataKey="t" {...axisProps} minTickGap={32} />
         <YAxis domain={domain} {...axisProps} unit={unit} />
         <Tooltip contentStyle={tooltipStyle} />
+        {bands && <ReferenceLine y={bands.bad} stroke={COLORS.red} strokeDasharray="4 4" label={{ value: `${bands.bad}${unit}`, position: 'right', fill: COLORS.red, fontSize: 10, fontFamily: 'JetBrains Mono' }} />}
         {keyMap[metric].map((k, i) => (
           <Line isAnimationActive={false} key={k} type="monotone" dataKey={k} stroke={colors[i]} strokeWidth={2} dot={false} name={`Cámara ${i + 1}`} />
         ))}
