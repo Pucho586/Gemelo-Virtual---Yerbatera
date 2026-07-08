@@ -141,6 +141,15 @@ class PidPatch(BaseModel):
     reset: Optional[bool] = None
 
 
+class OnOffPatch(BaseModel):
+    enabled: Optional[bool] = None
+    sp: Optional[float] = None
+    hysteresis: Optional[float] = None
+    out_high: Optional[float] = None
+    out_low: Optional[float] = None
+    direct_action: Optional[bool] = None
+
+
 class ZapecadoPatch(BaseModel):
     velocidad_tambor: Optional[float] = None
     velocidad_chip: Optional[float] = None
@@ -149,7 +158,9 @@ class ZapecadoPatch(BaseModel):
     tau: Optional[float] = None
     falla_quemador: Optional[bool] = None
     falla_motor_tambor: Optional[bool] = None
+    control_mode: Optional[str] = None
     pid: Optional[PidPatch] = None
+    onoff: Optional[OnOffPatch] = None
 
 
 class SecadoPatch(BaseModel):

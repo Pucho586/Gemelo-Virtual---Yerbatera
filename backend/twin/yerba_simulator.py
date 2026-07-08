@@ -22,7 +22,10 @@ from collections import deque
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Tuple
 
-from .pid import PID
+from .pid import PID, OnOff
+
+# Modos de control por etapa (qué "sistema de control" gobierna la MV)
+CONTROL_MODES = ("manual", "onoff", "pid", "external")
 
 DEFAULT_LIMITS = {
     "temp_min": 10,
@@ -85,10 +88,15 @@ class Zapecado:
         self.falla_motor_tambor = False
         # tau (compat, no usado en modelo físico nuevo)
         self.tau = float(config.get("tau", 90.0))
+        # Sistema de control de esta etapa: manual | onoff | pid | external
+        self.control_mode = str(config.get("control_mode", "manual"))
         # PID interno (manipula velocidad_chip para llegar al SP)
         self.pid = PID(kp=0.15, ki=0.005, kd=0.0,
                        out_min=0.0, out_max=200.0,
                        direct_action=True)
+        # Controlador ON/OFF (bang-bang) sobre velocidad_chip
+        self.onoff = OnOff(sp=(self.temperatura_obj or 420.0), hysteresis=15.0,
+                           out_high=60.0, out_low=0.0, direct_action=True)
         if self.temperatura_obj is not None:
             self.pid.sp = float(self.temperatura_obj)
 
@@ -113,12 +121,22 @@ class Zapecado:
         return float(self.velocidad_chip)
 
     def update(self, dt: float, ambient_temp: float):
-        # PID opcional: ajusta velocidad_chip
-        if self.pid.enabled:
-            self.pid.sp = float(self.temperatura_obj) if self.temperatura_obj is not None else 420.0
+        # Sistema de control: quién ajusta velocidad_chip para llegar al SP
+        sp_t = float(self.temperatura_obj) if self.temperatura_obj is not None else 420.0
+        self.pid.enabled = (self.control_mode == "pid")
+        self.onoff.enabled = (self.control_mode == "onoff")
+        if self.control_mode == "pid":
+            self.pid.sp = sp_t
             out = self.pid.step(self.temperatura, dt)
             if out is not None:
                 self.velocidad_chip = max(0.0, min(200.0, out))
+        elif self.control_mode == "onoff":
+            self.onoff.sp = sp_t
+            out = self.onoff.step(self.temperatura, dt)
+            if out is not None:
+                self.velocidad_chip = max(0.0, min(200.0, out))
+        # manual / external: la MV la fija el operador o el PLC (modo twin);
+        # la física responde a velocidad_chip tal como esté.
         # Balance térmico
         T = self.temperatura
         dT = T - ambient_temp
@@ -498,7 +516,7 @@ class YerbaProcessSimulator:
     def set_zapecado(self, *, velocidad_tambor=None, velocidad_chip=None, estado_alimentacion=None,
                      temperatura_obj=None, tau=None,
                      falla_quemador=None, falla_motor_tambor=None,
-                     pid=None):
+                     pid=None, onoff=None, control_mode=None):
         with self.lock:
             z = self.zapecado
             if velocidad_tambor is not None:
@@ -517,8 +535,15 @@ class YerbaProcessSimulator:
                 z.falla_quemador = bool(falla_quemador)
             if falla_motor_tambor is not None:
                 z.falla_motor_tambor = bool(falla_motor_tambor)
+            if control_mode is not None and control_mode in CONTROL_MODES:
+                z.control_mode = control_mode
+            if onoff is not None and isinstance(onoff, dict):
+                z.onoff.update_params(**onoff)
             if pid is not None and isinstance(pid, dict):
-                z.pid.update_params(**pid)
+                # Compat: activar/desactivar el PID desde el panel viejo mapea al modo de control
+                if "enabled" in pid:
+                    z.control_mode = "pid" if pid["enabled"] else ("manual" if z.control_mode == "pid" else z.control_mode)
+                z.pid.update_params(**{k: v for k, v in pid.items() if k != "enabled"})
 
     def set_secado(self, *, velocidad_aire=None, posicion_calefactor=None, estado=None,
                    temperatura_obj=None, humedad_obj=None, tau_t=None,
@@ -758,7 +783,9 @@ class YerbaProcessSimulator:
                 "velocidad_chip": z.velocidad_chip,
                 "estado_alimentacion": z.estado_alimentacion,
                 "tau": z.tau,
+                "control_mode": z.control_mode,
                 "pid": z.pid.to_dict(),
+                "onoff": z.onoff.to_dict(),
                 "faults": {
                     "falla_quemador": z.falla_quemador,
                     "falla_motor_tambor": z.falla_motor_tambor,
