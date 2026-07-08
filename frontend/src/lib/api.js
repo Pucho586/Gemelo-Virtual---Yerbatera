@@ -70,6 +70,9 @@ export const api = {
   // Config
   getConfig: () => http.get('/config').then(r => r.data),
   patchConfig: (body) => http.post('/config', body).then(r => r.data),
+  // Protocolos (selección + variables expuestas)
+  getProtocols: () => http.get('/protocols').then(r => r.data),
+  setProtocolEnabled: (name, enabled) => http.post(`/protocols/${name}`, { enabled }).then(r => r.data),
   // Weather
   getWeather: () => http.get('/weather').then(r => r.data),
   setWeatherLocation: (body) => http.post('/weather/location', body).then(r => r.data),
@@ -82,6 +85,8 @@ export const api = {
   aiReset: (sid) => http.post(`/ai/reset/${sid}`).then(r => r.data),
   aiAnomalies: (useAi = true) => http.get(`/ai/anomalies?use_ai=${useAi}`).then(r => r.data),
   aiForecast: (h = 30) => http.get(`/ai/forecast?horizon=${h}`).then(r => r.data),
+  aiGetProvider: () => http.get('/ai/provider').then(r => r.data),
+  aiSetProvider: (provider) => http.post('/ai/provider', { provider }).then(r => r.data),
   // Recipes
   listRecipes: () => http.get('/recipes').then(r => r.data),
   applyRecipe: (id) => http.post(`/recipes/${id}/apply`).then(r => r.data),

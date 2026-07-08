@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Card, CardHeader, Btn, NumberInput, TextInput, Toggle, StatusBadge, SectionTitle } from './UI';
+import { Card, CardHeader, Btn, NumberInput, Toggle, StatusBadge, SectionTitle } from './UI';
 import { api } from '../lib/api';
 import { Cloud, MapPin, FloppyDisk, Download, MagnifyingGlass } from '@phosphor-icons/react';
 
@@ -116,41 +116,12 @@ export default function ConfigView({ status }) {
         </div>
       </Card>
 
-      {/* Modbus */}
-      <Card className="p-5" testid="config-modbus">
-        <SectionTitle kicker="03">Modbus TCP</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-3">
-          <TextInput testid="modbus-ip" label="IP" value={cfg.modbus.ip} onChange={(v) => update('modbus', 'ip', v)} />
-          <NumberInput testid="modbus-port" label="Puerto" value={cfg.modbus.port} onChange={(v) => update('modbus', 'port', v)} />
-          <NumberInput testid="modbus-rate" label="Refresh" unit="s" value={cfg.modbus.rate} onChange={(v) => update('modbus', 'rate', v)} step={0.5} />
-        </div>
-      </Card>
-
-      {/* MQTT */}
-      <Card className="p-5" testid="config-mqtt">
-        <SectionTitle kicker="04">MQTT</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
-          <TextInput testid="mqtt-broker" label="Broker" value={cfg.mqtt.broker} onChange={(v) => update('mqtt', 'broker', v)} />
-          <NumberInput testid="mqtt-port" label="Puerto" value={cfg.mqtt.port} onChange={(v) => update('mqtt', 'port', v)} />
-          <TextInput testid="mqtt-topic" label="Topic base" value={cfg.mqtt.topic} onChange={(v) => update('mqtt', 'topic', v)} />
-          <NumberInput testid="mqtt-interval" label="Intervalo" unit="s" value={cfg.mqtt.interval} onChange={(v) => update('mqtt', 'interval', v)} />
-          <TextInput testid="mqtt-user" label="Usuario" value={cfg.mqtt.user} onChange={(v) => update('mqtt', 'user', v)} />
-          <TextInput testid="mqtt-pass" label="Contraseña" value={cfg.mqtt.pass} onChange={(v) => update('mqtt', 'pass', v)} />
-          <NumberInput testid="mqtt-keepalive" label="Keepalive" unit="s" value={cfg.mqtt.keepalive} onChange={(v) => update('mqtt', 'keepalive', v)} />
-        </div>
-      </Card>
-
-      {/* OPC UA */}
-      <Card className="p-5" testid="config-opcua">
-        <SectionTitle kicker="05">OPC UA</SectionTitle>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-3">
-          <TextInput testid="opcua-host" label="Host" value={cfg.opcua.host} onChange={(v) => update('opcua', 'host', v)} />
-          <NumberInput testid="opcua-port" label="Puerto" value={cfg.opcua.port} onChange={(v) => update('opcua', 'port', v)} />
-          <TextInput testid="opcua-path" label="Path" value={cfg.opcua.path} onChange={(v) => update('opcua', 'path', v)} />
-          <TextInput testid="opcua-namespace" label="Namespace" value={cfg.opcua.namespace} onChange={(v) => update('opcua', 'namespace', v)} className="md:col-span-2" />
-          <NumberInput testid="opcua-interval" label="Intervalo" unit="ms" value={cfg.opcua.interval} onChange={(v) => update('opcua', 'interval', v)} />
-        </div>
-        <p className="font-mono text-[11px] text-slate-500 mt-3">Endpoint: opc.tcp://{cfg.opcua.host}:{cfg.opcua.port}{cfg.opcua.path}</p>
+      {/* Protocolos → movidos a su propia pestaña */}
+      <Card className="p-5" testid="config-protocols-moved">
+        <SectionTitle kicker="03">Protocolos industriales</SectionTitle>
+        <p className="text-sm text-slate-400 mt-2">
+          La selección y configuración de <span className="text-amber-300">Modbus TCP</span>, <span className="text-amber-300">MQTT</span> y <span className="text-amber-300">OPC UA</span> — junto con las variables que expone cada uno — ahora viven en la pestaña <span className="text-amber-300 font-mono">Integración → Protocolos</span>.
+        </p>
       </Card>
 
       {/* Simulación + Persistencia */}

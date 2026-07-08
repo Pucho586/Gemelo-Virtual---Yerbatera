@@ -54,7 +54,7 @@ La IA + simulaciones ayudan en cada uno. **No reemplaza al operador** — le da 
            ┌────────────────────┐                 │
            │ Capa 2             │                 │
            │ Gemini 3 Flash LLM │  diagnóstico    │
-           │ (Emergent LLM Key) │ ◄───────────────┘
+           │  (Claude / Gemini) │ ◄───────────────┘
            └────────┬───────────┘
                     │ recomendación texto
                     ▼
@@ -66,7 +66,7 @@ La IA + simulaciones ayudan en cada uno. **No reemplaza al operador** — le da 
 | Capa | Tecnología | Latencia | Para qué |
 |---|---|---|---|
 | 1 — Reglas | If/then en Python | <10 ms | Detección rápida y barata. Sin LLM. |
-| 2 — LLM | Gemini 3 Flash via Emergent LLM key | 1-3 s | Explicación + acción sugerida en lenguaje natural. |
+| 2 — LLM | Claude o Gemini (proveedor seleccionable) | 1-3 s | Explicación + acción sugerida en lenguaje natural. |
 | 3 — Forecast | Mínimos cuadrados en NumPy puro | <100 ms | Adelantarse 30 pasos: ¿esto sigue subiendo? |
 | 4 — What-If | Hasta 3 simulators paralelos | 1-2 s | "¿Qué pasaría si bajo SP a 90°C?" |
 
@@ -255,7 +255,7 @@ El escenario A da HR=6.8% (en spec) y kWh/kg=12.1 → ganador.
 ## 9. Privacidad, costos y límites
 
 ### Privacidad
-- El chat va a Gemini 3 Flash vía la **Emergent LLM Key** (no a OpenAI ni a Google directamente).
+- El chat va al proveedor elegido en **Configuración → IA**: **Claude** (Anthropic) o **Gemini** (Google), usando el SDK oficial de cada uno.
 - **No mandamos datos identificables** (sin nombres de operarios, sin datos personales). Sólo telemetría de proceso.
 - Conversaciones se guardan **sólo en memoria del backend**. Reinicio = se borran.
 
@@ -277,11 +277,11 @@ El escenario A da HR=6.8% (en spec) y kWh/kg=12.1 → ganador.
 | 1 | Forecast con Prophet/TimeGPT para horizontes >1h | P2 | Requiere datasets de >1 mes de operación. |
 | 2 | Detector de anomalías por Isolation Forest sobre histórico | P2 | Para captar patrones no cubiertos por reglas. |
 | 3 | Aprendizaje del PID óptimo por bayesian optimization (Optuna) | P2 | Trade-off offline. |
-| 4 | Voice assistant (Whisper + TTS) para operarios con manos ocupadas | P3 | Emergent LLM Key soporta Whisper. |
+| 4 | Voice assistant (STT + TTS) para operarios con manos ocupadas | P3 | Requiere integrar un proveedor de voz aparte. |
 | 5 | Replay con velocidad adaptativa según importancia del evento | P3 | "Saltar" tramos planos automáticamente. |
 | 6 | Self-tuning de mermas en `mass_flow` por mínimos cuadrados sobre últimos 30 lotes | P2 | Calibración continua. |
 
 ---
 
 > **Pregunta frecuente**: ¿Puedo usar otro modelo distinto a Gemini?
-> Sí — la Emergent LLM Key soporta también Claude Sonnet 4.5 y OpenAI GPT-5.2 con el mismo SDK. Cambiá `GEMINI_MODEL` y `PROVIDER` en `ai_service.py`. Para el chat de operario, Gemini Flash es la opción más barata + rápida.
+> Sí — el sistema ya integra **Claude** (Anthropic) y **Gemini** (Google) y podés elegir cuál usar desde **Configuración → IA**, o cambiando `ai.provider` en `config_yerba.yaml`. Los modelos se ajustan con `claude_model` / `gemini_model`. Para el chat de operario, un modelo Flash/Haiku es la opción más barata y rápida.

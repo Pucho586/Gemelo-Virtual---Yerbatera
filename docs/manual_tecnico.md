@@ -92,7 +92,7 @@
 ```
 /app/
 ├── backend/
-│   ├── .env                       # JWT_SECRET, ADMIN_RECOVERY_CODE, EMERGENT_LLM_KEY, MONGO_URL
+│   ├── .env                       # JWT_SECRET, ADMIN_RECOVERY_CODE, ANTHROPIC_API_KEY / GEMINI_API_KEY, MONGO_URL
 │   ├── requirements.txt
 │   ├── config_yerba.yaml          # Config de servidores, persistencia, simulación
 │   ├── server.py                  # FastAPI app + routers + lifespan
@@ -102,7 +102,7 @@
 │       ├── runtime.py             # Orquestador del tick + bridges OUT/IN
 │       ├── weather.py             # Cliente Open-Meteo
 │       ├── persistence.py         # CSV/XLSX auto-save
-│       ├── ai_service.py          # Gemini 3 Flash (emergentintegrations)
+│       ├── ai_service.py          # IA seleccionable: Claude (anthropic) o Gemini (google-genai)
 │       ├── auth.py                # JWT + bcrypt + recovery
 │       ├── recipes.py             # CRUD de recetas
 │       ├── batches.py             # Ciclo de vida del lote
@@ -358,7 +358,7 @@ Salidas en `backend/data/reports/{tipo}_{fecha|id}.pdf`.
 
 ### 3.8 IA (`ai_service.py`)
 
-Modelo: **Gemini 3 Flash** vía `emergentintegrations` (clave `EMERGENT_LLM_KEY` en `.env`).
+Proveedor **seleccionable en Configuración → IA**: **Claude** (SDK oficial `anthropic`, clave `ANTHROPIC_API_KEY`) o **Google Gemini** (SDK `google-genai`, clave `GEMINI_API_KEY`). Se elige con `ai.provider` en `config_yerba.yaml` o desde la pestaña de IA.
 
 Endpoints:
 - `POST /api/ai/chat` — sesión multi-turno con `session_id`.
@@ -870,13 +870,13 @@ MONGO_URL=mongodb://localhost:27017
 DB_NAME=yerba_twin
 JWT_SECRET=<256-bit hex generado con secrets.token_hex(32)>
 ADMIN_RECOVERY_CODE=yerbatera-recovery-2026
-EMERGENT_LLM_KEY=<universal key>
+ANTHROPIC_API_KEY=<clave de Anthropic>   # o GEMINI_API_KEY=<clave de Google>
 ```
 
 ### Frontend (`/app/frontend/.env`)
 
 ```bash
-REACT_APP_BACKEND_URL=https://<dominio>.preview.emergentagent.com
+REACT_APP_BACKEND_URL=http://localhost:8001   # o tu dominio de backend
 ```
 
 > **Nunca** hardcodear URLs ni ports. Toda config viene de `.env` para que el mismo bundle corra en dev/staging/prod.
@@ -898,7 +898,7 @@ yarn build      # producción
 yarn start      # dev (3000)
 ```
 
-En el contenedor Emergent: ambos servicios son manejados por **supervisor**. Hot-reload activo. Comando de reinicio manual:
+Con supervisor configurado, ambos servicios se manejan automáticamente. Hot-reload activo. Comando de reinicio manual:
 
 ```bash
 sudo supervisorctl restart backend
@@ -966,12 +966,12 @@ Logs:
 | JWT en cookie + Bearer fallback | Cookie httpOnly para mitigar XSS, Bearer para integraciones |
 | Tick async vs thread | Permite mezclar Modbus sync (pymodbus 3.7.4) con OPC UA async sin GIL pain |
 | ReportLab sobre WeasyPrint | Sin dependencia de browsers headless, deterministico, footprint chico |
-| Emergent LLM key | Llave universal del agente, evita exponer secretos por integrador |
+| IA con proveedor seleccionable | Claude o Gemini con SDK oficial; se cambia en Configuración sin tocar código |
 | `chip_calorific_mj_kg` editable | Diferentes plantas usan chips con humedades distintas; PCI cambia consumo lineal |
 
 ---
 
 ## 13. Contacto / soporte
 
-Issues técnicos: equipo de desarrollo Emergent.
+Issues técnicos: equipo de desarrollo.
 Soporte de planta: TI interno + manual de operaciones (`manual_operaciones.md`).

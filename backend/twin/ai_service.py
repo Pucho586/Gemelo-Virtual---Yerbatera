@@ -1,18 +1,24 @@
-"""Asistente IA + detección de anomalías + forecast con Gemini 3 Flash."""
+"""Asistente IA + detección de anomalías + forecast.
+
+Proveedor de IA seleccionable en configuración (config_yerba.yaml → `ai.provider`):
+  - "claude"  → SDK oficial `anthropic` (variable ANTHROPIC_API_KEY)
+  - "gemini"  → SDK oficial `google-genai`  (variable GEMINI_API_KEY)
+
+Así se puede comparar cuál funciona mejor sin tocar el código.
+El historial de conversación se mantiene en memoria (la API es stateless).
+"""
 import json
 import logging
 import os
 import statistics
-import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
-
-from emergentintegrations.llm.chat import LlmChat, UserMessage
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
-GEMINI_MODEL = "gemini-3-flash-preview"
-PROVIDER = "gemini"
+# Modelos por defecto (editables desde config)
+DEFAULT_CLAUDE_MODEL = "claude-opus-4-8"
+DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview"
 
 SYSTEM_PROMPT = (
     "Sos un ingeniero experto en procesos industriales de yerba mate. "
@@ -24,38 +30,100 @@ SYSTEM_PROMPT = (
     "del SI. Cuando sugieras cambios, explicá el porqué."
 )
 
-
-def _get_api_key() -> str:
-    key = os.environ.get("EMERGENT_LLM_KEY", "")
-    if not key:
-        raise RuntimeError("Falta EMERGENT_LLM_KEY en backend/.env")
-    return key
+VALID_PROVIDERS = ("claude", "gemini")
 
 
 class AIService:
     """
-    Mantiene sesiones de chat y expone helpers de análisis.
-    `sessions` es un dict session_id -> LlmChat (una instancia por sesión).
+    Asistente con proveedor conmutable (Claude / Gemini).
+    `session_messages` guarda el historial por sesión en memoria.
     """
 
-    def __init__(self):
-        self.sessions: Dict[str, LlmChat] = {}
+    def __init__(self, config: Optional[Dict[str, Any]] = None):
+        config = config or {}
+        self.provider: str = (config.get("provider") or os.environ.get("AI_PROVIDER") or "claude").lower()
+        if self.provider not in VALID_PROVIDERS:
+            self.provider = "claude"
+        self.claude_model: str = config.get("claude_model") or DEFAULT_CLAUDE_MODEL
+        self.gemini_model: str = config.get("gemini_model") or DEFAULT_GEMINI_MODEL
         self.session_messages: Dict[str, List[Dict[str, str]]] = {}
+        self._anthropic = None  # cliente perezoso
+        self._genai = None
 
-    def _get_or_create_chat(self, session_id: str) -> LlmChat:
-        if session_id not in self.sessions:
-            chat = LlmChat(
-                api_key=_get_api_key(),
-                session_id=session_id,
-                system_message=SYSTEM_PROMPT,
-            ).with_model(PROVIDER, GEMINI_MODEL)
-            self.sessions[session_id] = chat
-            self.session_messages[session_id] = []
-        return self.sessions[session_id]
+    # ---------- Selección de proveedor ----------
+    def set_provider(self, provider: str) -> str:
+        provider = (provider or "").lower()
+        if provider not in VALID_PROVIDERS:
+            raise ValueError(f"Proveedor inválido: {provider}. Usá uno de {VALID_PROVIDERS}.")
+        self.provider = provider
+        return self.provider
+
+    def get_config(self) -> Dict[str, Any]:
+        return {
+            "provider": self.provider,
+            "claude_model": self.claude_model,
+            "gemini_model": self.gemini_model,
+            "providers": [
+                {"id": "claude", "label": "Claude (Anthropic)", "model": self.claude_model,
+                 "key_env": "ANTHROPIC_API_KEY", "key_present": bool(os.environ.get("ANTHROPIC_API_KEY"))},
+                {"id": "gemini", "label": "Google Gemini", "model": self.gemini_model,
+                 "key_env": "GEMINI_API_KEY", "key_present": bool(os.environ.get("GEMINI_API_KEY"))},
+            ],
+        }
+
+    # ---------- Clientes ----------
+    def _get_anthropic(self):
+        if self._anthropic is None:
+            from anthropic import AsyncAnthropic  # import perezoso
+            key = os.environ.get("ANTHROPIC_API_KEY")
+            if not key:
+                raise RuntimeError("Falta ANTHROPIC_API_KEY en el entorno del backend.")
+            self._anthropic = AsyncAnthropic(api_key=key)
+        return self._anthropic
+
+    def _get_genai(self):
+        if self._genai is None:
+            from google import genai  # import perezoso
+            key = os.environ.get("GEMINI_API_KEY")
+            if not key:
+                raise RuntimeError("Falta GEMINI_API_KEY en el entorno del backend.")
+            self._genai = genai.Client(api_key=key)
+        return self._genai
+
+    # ---------- Llamadas por proveedor ----------
+    async def _complete(self, messages: List[Dict[str, str]]) -> str:
+        """messages: [{role: 'user'|'assistant', content: str}, ...]"""
+        if self.provider == "gemini":
+            return await self._complete_gemini(messages)
+        return await self._complete_claude(messages)
+
+    async def _complete_claude(self, messages: List[Dict[str, str]]) -> str:
+        client = self._get_anthropic()
+        resp = await client.messages.create(
+            model=self.claude_model,
+            max_tokens=1024,
+            system=SYSTEM_PROMPT,
+            messages=[{"role": m["role"], "content": m["content"]} for m in messages],
+        )
+        return "".join(b.text for b in resp.content if getattr(b, "type", None) == "text").strip()
+
+    async def _complete_gemini(self, messages: List[Dict[str, str]]) -> str:
+        from google.genai import types
+        client = self._get_genai()
+        contents = [
+            {"role": "model" if m["role"] == "assistant" else "user", "parts": [{"text": m["content"]}]}
+            for m in messages
+        ]
+        resp = await client.aio.models.generate_content(
+            model=self.gemini_model,
+            contents=contents,
+            config=types.GenerateContentConfig(system_instruction=SYSTEM_PROMPT),
+        )
+        return (resp.text or "").strip()
 
     # ---------- CHAT ----------
     async def chat(self, session_id: str, message: str, context: Dict[str, Any] | None = None) -> str:
-        chat = self._get_or_create_chat(session_id)
+        history = self.session_messages.setdefault(session_id, [])
         text = message
         if context:
             text = (
@@ -63,17 +131,19 @@ class AIService:
                 f"```json\n{json.dumps(context, ensure_ascii=False, default=str)}\n```\n\n"
                 f"Pregunta del operario: {message}"
             )
-        resp = await chat.send_message(UserMessage(text=text))
-        # Guardar historial (en memoria)
-        self.session_messages[session_id].append({"role": "user", "content": message, "ts": datetime.now(timezone.utc).isoformat()})
-        self.session_messages[session_id].append({"role": "assistant", "content": str(resp), "ts": datetime.now(timezone.utc).isoformat()})
-        return str(resp)
+        convo = [{"role": h["role"], "content": h["content"]} for h in history]
+        convo.append({"role": "user", "content": text})
+        reply = await self._complete(convo)
+        # Guardar historial (se guarda el mensaje "limpio", sin el JSON de contexto)
+        now = datetime.now(timezone.utc).isoformat()
+        history.append({"role": "user", "content": message, "ts": now})
+        history.append({"role": "assistant", "content": reply, "ts": now})
+        return reply
 
     def get_history(self, session_id: str) -> List[Dict[str, str]]:
         return self.session_messages.get(session_id, [])
 
     def reset_session(self, session_id: str):
-        self.sessions.pop(session_id, None)
         self.session_messages.pop(session_id, None)
 
     # ---------- ANÁLISIS ----------
@@ -116,24 +186,17 @@ class AIService:
         ai_text = None
         if use_ai and rules:
             try:
-                session = f"anomaly-{uuid.uuid4().hex[:8]}"
-                chat = LlmChat(
-                    api_key=_get_api_key(),
-                    session_id=session,
-                    system_message=SYSTEM_PROMPT,
-                ).with_model(PROVIDER, GEMINI_MODEL)
                 prompt = (
                     "Analizá estas anomalías detectadas en el gemelo digital y dame un diagnóstico "
                     "breve (máx 4 frases) con la causa más probable y la acción inmediata recomendada.\n\n"
                     f"Anomalías: {json.dumps(rules, ensure_ascii=False)}\n\n"
                     f"Estado completo: {json.dumps(state, ensure_ascii=False, default=str)}"
                 )
-                resp = await chat.send_message(UserMessage(text=prompt))
-                ai_text = str(resp)
+                ai_text = await self._complete([{"role": "user", "content": prompt}])
             except Exception as e:
                 logger.warning(f"AI anomaly analysis failed: {e}")
                 ai_text = f"(IA no disponible: {e})"
-        return {"anomalies": rules, "diagnosis": ai_text}
+        return {"anomalies": rules, "diagnosis": ai_text, "provider": self.provider}
 
     # ---------- FORECAST ----------
     @staticmethod

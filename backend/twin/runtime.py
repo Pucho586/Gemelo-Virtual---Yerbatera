@@ -37,6 +37,9 @@ def load_config() -> Dict[str, Any]:
                                "longitude": DEFAULT_LOCATION["longitude"],
                                "city": DEFAULT_LOCATION["city"]})
     cfg.setdefault("persistence", {"enabled": True, "interval_seconds": 5})
+    cfg.setdefault("ai", {"provider": "claude",
+                          "claude_model": "claude-opus-4-8",
+                          "gemini_model": "gemini-3-flash-preview"})
     cfg.setdefault("external", {
         "modbus_client": {"enabled": False, "host": "127.0.0.1", "port": 5020, "interval": 2.0},
         "opcua_client": {"enabled": False, "endpoint": "opc.tcp://127.0.0.1:4840/yerba/", "interval": 2.0, "namespace_idx": 2},
@@ -56,7 +59,7 @@ class TwinRuntime:
     def __init__(self):
         self.config: Dict[str, Any] = load_config()
         self.simulator = YerbaProcessSimulator(self.config)
-        self.ai = AIService()
+        self.ai = AIService(config=self.config.get("ai"))
 
         # Servicios industriales
         self.modbus: YerbaModbusServer | None = None
@@ -113,6 +116,11 @@ class TwinRuntime:
     # ---------- Servidores industriales ----------
     def start_modbus(self):
         mb_cfg = self.config.get("modbus", {})
+        if not mb_cfg.get("enabled", True):
+            self.service_status["modbus"] = {"running": False, "error": None, "disabled": True,
+                                             "ip": mb_cfg.get("ip"), "port": mb_cfg.get("port")}
+            logger.info("Modbus TCP deshabilitado por configuración")
+            return
         try:
             self.modbus = YerbaModbusServer(self.simulator, mb_cfg)
 
@@ -139,6 +147,11 @@ class TwinRuntime:
 
     def start_mqtt(self):
         mqtt_cfg = self.config.get("mqtt", {})
+        if not mqtt_cfg.get("enabled", True):
+            self.service_status["mqtt"] = {"running": False, "error": None, "disabled": True,
+                                           "broker": mqtt_cfg.get("broker"), "port": mqtt_cfg.get("port")}
+            logger.info("MQTT deshabilitado por configuración")
+            return
         try:
             self.mqtt = YerbaMqttPublisher(self.simulator, mqtt_cfg)
             self.mqtt.start()
@@ -155,6 +168,10 @@ class TwinRuntime:
 
     def start_opcua(self):
         op_cfg = self.config.get("opcua", {})
+        if not op_cfg.get("enabled", True):
+            self.service_status["opcua"] = {"running": False, "error": None, "disabled": True, "endpoint": None}
+            logger.info("OPC UA deshabilitado por configuración")
+            return
         try:
             self.opcua = YerbaOpcUaServer(self.simulator, op_cfg)
 

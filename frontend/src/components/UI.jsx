@@ -11,7 +11,7 @@ export function StatusBadge({ state, label, testid }) {
   return (
     <span
       data-testid={testid}
-      className={`inline-flex items-center gap-2 px-2 py-1 text-[10px] font-mono uppercase tracking-wider border ${color}`}
+      className={`inline-flex items-center gap-2 px-2 py-1 text-[11px] font-mono uppercase tracking-wider border ${color}`}
     >
       <span className={`live-dot ${dotColor}`}>●</span>
       {label}
@@ -42,7 +42,7 @@ export function CardHeader({ title, subtitle, action, testid }) {
 export function Metric({ label, value, unit, color, big = false, testid }) {
   return (
     <div data-testid={testid} className="flex flex-col gap-1">
-      <span className="text-[10px] font-mono uppercase tracking-wider text-slate-500">{label}</span>
+      <span className="text-[11px] font-mono uppercase tracking-wider text-slate-400">{label}</span>
       <div className="flex items-baseline gap-1.5">
         <span
           className={`font-mono font-light tracking-tight ${big ? 'text-3xl sm:text-4xl' : 'text-xl sm:text-2xl'}`}

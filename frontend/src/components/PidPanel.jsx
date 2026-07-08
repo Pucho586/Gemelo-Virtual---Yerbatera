@@ -18,6 +18,7 @@ export default function PidPanel({ title = 'Controlador PID interno', pid, onApp
 
   React.useEffect(() => {
     if (pid) { setKp(pid.kp); setKi(pid.ki); setKd(pid.kd); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pid?.kp, pid?.ki, pid?.kd]);
 
   const submit = (patch) => onApply(patch);
