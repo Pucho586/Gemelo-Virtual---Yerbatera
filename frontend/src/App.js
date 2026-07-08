@@ -15,6 +15,7 @@ import ConfigView from './components/ConfigView';
 import RecetasView from './components/RecetasView';
 import LotesView from './components/LotesView';
 import Industria40View from './components/Industria40View';
+import ProtocolsView from './components/ProtocolsView';
 import OperacionesView from './components/OperacionesView';
 import Fase4View from './components/Fase4View';
 import MassFlowView from './components/MassFlowView';
@@ -22,7 +23,7 @@ import DocsModal from './components/DocsModal';
 import TourModal from './components/TourModal';
 import SpeedControl from './components/SpeedControl';
 import WeatherControl from './components/WeatherControl';
-import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen, GraduationCap } from '@phosphor-icons/react';
+import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen, GraduationCap, Broadcast } from '@phosphor-icons/react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', Icon: House, role: 'any' },
@@ -34,6 +35,7 @@ const TABS = [
   { id: 'recetas', label: 'Recetas', Icon: ForkKnife, role: 'any' },
   { id: 'lotes', label: 'Lotes', Icon: Package, role: 'any' },
   { id: 'ops', label: 'Operaciones', Icon: ChartLineUp, role: 'any' },
+  { id: 'protocolos', label: 'Protocolos', Icon: Broadcast, role: 'any' },
   { id: 'i40', label: 'Industria 4.0', Icon: Plugs, role: 'any' },
   { id: 'fase4', label: 'Replay & What-if', Icon: Flask, role: 'any' },
   { id: 'ia', label: 'IA · Gemini', Icon: Sparkle, role: 'any' },
@@ -46,7 +48,7 @@ const GROUPS = [
   { id: 'operacion', label: 'Operación', Icon: House, tabs: ['dashboard', 'massflow', 'recetas', 'lotes'] },
   { id: 'proceso', label: 'Proceso', Icon: Fire, tabs: ['zapecado', 'secado', 'canchado', 'camaras'] },
   { id: 'analisis', label: 'Análisis', Icon: ChartLineUp, tabs: ['ops', 'fase4', 'ia'] },
-  { id: 'integracion', label: 'Integración', Icon: Plugs, tabs: ['i40', 'config'] },
+  { id: 'integracion', label: 'Integración', Icon: Plugs, tabs: ['protocolos', 'i40', 'config'] },
 ];
 
 function AuthedApp() {
@@ -218,6 +220,7 @@ function AuthedApp() {
         <div style={{ display: tab === 'recetas' ? 'block' : 'none' }}><RecetasView /></div>
         <div style={{ display: tab === 'lotes' ? 'block' : 'none' }}><LotesView /></div>
         <div style={{ display: tab === 'ops' ? 'block' : 'none' }}><OperacionesView /></div>
+        <div style={{ display: tab === 'protocolos' ? 'block' : 'none' }}><ProtocolsView /></div>
         <div style={{ display: tab === 'i40' ? 'block' : 'none' }}><Industria40View /></div>
         <div style={{ display: tab === 'fase4' ? 'block' : 'none' }}><Fase4View /></div>
         <div style={{ display: tab === 'ia' ? 'block' : 'none' }}><AIPanel /></div>

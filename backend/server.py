@@ -197,6 +197,10 @@ class CamarasCountBody(BaseModel):
     count: int
 
 
+class ProtocolToggle(BaseModel):
+    enabled: bool
+
+
 class ChatRequest(BaseModel):
     message: str
     session_id: Optional[str] = None
@@ -405,6 +409,98 @@ async def get_config():
 async def patch_config(p: ConfigPatch, user=Depends(admin_only)):
     cfg = get_runtime().update_config(p.model_dump(exclude_none=True))
     return {"saved": True, "config": cfg}
+
+
+# ---------- PROTOCOLOS (selección + variables expuestas) ----------
+_TAG_UNITS = {"temperatura": "°C", "humedad": "%", "co2": "ppm",
+              "velocidad_molino": "rpm", "tamano_particula": "mm"}
+_FIELD_LABELS = {"temperatura": "Temperatura", "humedad": "Humedad", "co2": "CO₂",
+                 "velocidad_molino": "Velocidad molino", "tamano_particula": "Tamaño partícula"}
+_FIELD_OPCUA = {"temperatura": "Temperatura", "humedad": "Humedad", "co2": "CO2",
+                "velocidad_molino": "VelocidadMolino", "tamano_particula": "TamanoParticula"}
+
+
+def _protocol_variables():
+    """Lista canónica de variables con su direccionamiento en cada protocolo."""
+    from twin.external_sources import DEFAULT_MODBUS_MAP
+    rt = get_runtime()
+    ncam = len(rt.simulator.camaras)
+    mqtt_base = rt.config.get("mqtt", {}).get("topic", "yerba")
+
+    def parts(tag):
+        stage, field = tag.split(".", 1)
+        return stage, field
+
+    def stage_label(stage):
+        if stage.startswith("cam"):
+            return f"Cámara {int(stage[3:]) + 1}"
+        return stage.capitalize()
+
+    out = []
+    for tag, spec in DEFAULT_MODBUS_MAP.items():
+        stage, field = parts(tag)
+        if stage.startswith("cam") and int(stage[3:]) >= ncam:
+            continue  # ocultar cámaras inexistentes
+        if stage.startswith("cam"):
+            opc_obj = f"Camara{int(stage[3:]) + 1}"
+            mqtt_stage = f"camara_{int(stage[3:]) + 1}"
+        else:
+            opc_obj = stage.capitalize()
+            mqtt_stage = stage
+        out.append({
+            "tag": tag,
+            "label": f"{stage_label(stage)} · {_FIELD_LABELS.get(field, field)}",
+            "unit": _TAG_UNITS.get(field, ""),
+            "modbus": {"unit": spec["unit"], "addr": spec["addr"], "scale": spec["scale"]},
+            "opcua": f"{opc_obj}.{_FIELD_OPCUA.get(field, field.capitalize())}",
+            "mqtt": f"{mqtt_base}/{mqtt_stage}/{field}",
+        })
+    return out
+
+
+@api.get("/protocols")
+async def get_protocols():
+    rt = get_runtime()
+    st = rt.service_status
+    cfg = rt.config
+
+    def block(name):
+        c = cfg.get(name, {})
+        s = st.get(name, {})
+        return {
+            "enabled": c.get("enabled", True),
+            "running": s.get("running", False),
+            "error": s.get("error"),
+            "config": c,
+        }
+
+    return {
+        "modbus": block("modbus"),
+        "mqtt": block("mqtt"),
+        "opcua": block("opcua"),
+        "variables": _protocol_variables(),
+    }
+
+
+@api.post("/protocols/{name}")
+async def set_protocol(name: str, body: ProtocolToggle, request: Request, user=Depends(admin_only)):
+    if name not in ("modbus", "mqtt", "opcua"):
+        raise HTTPException(status_code=400, detail="Protocolo inválido")
+    rt = get_runtime()
+    rt.update_config({name: {"enabled": body.enabled}})
+    await audit_service.log(user["username"], "set_protocol",
+                            {"protocol": name, "enabled": body.enabled},
+                            ip=request.client.host if request.client else None)
+    # Habilitar puede arrancar en caliente; deshabilitar requiere reinicio del backend.
+    hot_started = False
+    if body.enabled and not rt.service_status.get(name, {}).get("running"):
+        try:
+            {"modbus": rt.start_modbus, "mqtt": rt.start_mqtt, "opcua": rt.start_opcua}[name]()
+            hot_started = bool(rt.service_status.get(name, {}).get("running"))
+        except Exception:
+            hot_started = False
+    note = None if body.enabled else "El apagado se aplica al reiniciar el backend."
+    return {"protocol": name, "enabled": body.enabled, "hot_started": hot_started, "note": note}
 
 
 # ---------- CLIMA ----------

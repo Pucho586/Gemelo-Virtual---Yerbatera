@@ -70,6 +70,9 @@ export const api = {
   // Config
   getConfig: () => http.get('/config').then(r => r.data),
   patchConfig: (body) => http.post('/config', body).then(r => r.data),
+  // Protocolos (selección + variables expuestas)
+  getProtocols: () => http.get('/protocols').then(r => r.data),
+  setProtocolEnabled: (name, enabled) => http.post(`/protocols/${name}`, { enabled }).then(r => r.data),
   // Weather
   getWeather: () => http.get('/weather').then(r => r.data),
   setWeatherLocation: (body) => http.post('/weather/location', body).then(r => r.data),
