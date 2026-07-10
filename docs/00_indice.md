@@ -19,6 +19,7 @@ Esta documentación está organizada por **rol de lector**. Empezá por el manua
 | **04** | `manual_machine_learning.md` | Ingeniero de procesos · Supervisor · Data team | Cómo funciona la IA integrada: Gemini 3 Flash (chat + diagnóstico), detección de anomalías por reglas + LLM, forecast por mínimos cuadrados, optimización de procesos y *what-if* scenarios. |
 | **05** | `manual_tecnico.md` | Desarrollador · DevOps · Integrador instrumentación | Arquitectura completa: layout de carpetas, modelo físico, mapeo Modbus/OPC UA, schemas Mongo, JWT, alarmas ISA-18.2, OEE, reportes PDF. |
 | **06** | `instructivo_nodered.md` | Integrador · Ingeniero de control | Conectar **Node-RED** y cámaras de maduración remotas vía MQTT al gemelo (modo bidireccional). Flow examples + troubleshooting. |
+| **07** | `manual_control_plc_scada.md` | Alumno · Docente de automatización | Controlar el proceso desde un **PLC** y visualizar/operar desde un **SCADA**. Variables de entrada/salida, los 4 sistemas de control por etapa (Manual/ON-OFF/PID/PLC externo) y flujo de práctica paso a paso. |
 
 ---
 
