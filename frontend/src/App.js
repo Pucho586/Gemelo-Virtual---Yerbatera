@@ -22,7 +22,7 @@ import DocsModal from './components/DocsModal';
 import TourModal from './components/TourModal';
 import SpeedControl from './components/SpeedControl';
 import WeatherControl from './components/WeatherControl';
-import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen, GraduationCap, Broadcast } from '@phosphor-icons/react';
+import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen, GraduationCap, Broadcast, Play } from '@phosphor-icons/react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', Icon: House, role: 'any' },
@@ -69,6 +69,9 @@ function AuthedApp() {
   const [activeAlarms, setActiveAlarms] = useState(0);
   const [mimicStyle, setMimicStyle] = useState(() => {
     try { return localStorage.getItem('yerba_mimic') || 'svg'; } catch (e) { return 'svg'; }
+  });
+  const [animated, setAnimated] = useState(() => {
+    try { return localStorage.getItem('yerba_animated') !== 'off'; } catch (e) { return true; }
   });
   const [docsOpen, setDocsOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -124,6 +127,14 @@ function AuthedApp() {
     try { localStorage.setItem('yerba_mimic', next); } catch (e) { /* ignore */ }
   };
 
+  const toggleAnimated = () => {
+    setAnimated(prev => {
+      const next = !prev;
+      try { localStorage.setItem('yerba_animated', next ? 'on' : 'off'); } catch (e) { /* ignore */ }
+      return next;
+    });
+  };
+
   const canSee = (id) => { const t = TAB_META[id]; return t && (t.role === 'any' || isAdmin(user)); };
   const visibleGroups = GROUPS
     .map(g => ({ ...g, tabs: g.tabs.filter(canSee) }))
@@ -171,6 +182,9 @@ function AuthedApp() {
             )}
             <button onClick={toggleMimic} className="text-xs font-mono text-slate-400 hover:text-amber-300 transition-colors border border-[#232A26] px-2 py-1" data-testid="mimic-toggle" title="Estilo de mímicos">
               {mimicStyle === 'svg' ? 'SVG' : 'P&ID'}
+            </button>
+            <button onClick={toggleAnimated} className={`inline-flex items-center gap-1 text-xs font-mono transition-colors border px-2 py-1 ${animated ? 'text-amber-300 border-amber-500/40' : 'text-slate-500 border-[#232A26]'}`} data-testid="animated-toggle" title={animated ? 'Animaciones activadas — clic para pausar' : 'Animaciones pausadas — clic para activar'}>
+              <Play size={12} weight={animated ? 'fill' : 'regular'} /> {animated ? 'Animación' : 'Estático'}
             </button>
             <SpeedControl />
             <button onClick={() => setTourOpen(true)} className="inline-flex items-center gap-1 text-xs font-mono text-amber-300 hover:text-amber-200 transition-colors border border-amber-500/40 px-2 py-1" data-testid="tour-open-btn" title="Tour guiado de primer turno">
@@ -225,10 +239,10 @@ function AuthedApp() {
       <main className="max-w-[1920px] mx-auto p-4 sm:p-6 lg:p-8" data-testid="main-content">
         <div style={{ display: tab === 'dashboard' ? 'block' : 'none' }}><Dashboard state={state} series={series} status={status} /></div>
         <div style={{ display: tab === 'massflow' ? 'block' : 'none' }}><MassFlowView /></div>
-        <div style={{ display: tab === 'zapecado' ? 'block' : 'none' }}><ZapecadoView state={state} series={series} mimicStyle={mimicStyle} /></div>
-        <div style={{ display: tab === 'secado' ? 'block' : 'none' }}><SecadoView state={state} series={series} mimicStyle={mimicStyle} /></div>
-        <div style={{ display: tab === 'canchado' ? 'block' : 'none' }}><CanchadoView state={state} series={series} mimicStyle={mimicStyle} /></div>
-        <div style={{ display: tab === 'camaras' ? 'block' : 'none' }}><CamarasView state={state} series={series} mimicStyle={mimicStyle} /></div>
+        <div style={{ display: tab === 'zapecado' ? 'block' : 'none' }}><ZapecadoView state={state} series={series} mimicStyle={mimicStyle} animated={animated} /></div>
+        <div style={{ display: tab === 'secado' ? 'block' : 'none' }}><SecadoView state={state} series={series} mimicStyle={mimicStyle} animated={animated} /></div>
+        <div style={{ display: tab === 'canchado' ? 'block' : 'none' }}><CanchadoView state={state} series={series} mimicStyle={mimicStyle} animated={animated} /></div>
+        <div style={{ display: tab === 'camaras' ? 'block' : 'none' }}><CamarasView state={state} series={series} mimicStyle={mimicStyle} animated={animated} /></div>
         <div style={{ display: tab === 'recetas' ? 'block' : 'none' }}><RecetasView /></div>
         <div style={{ display: tab === 'lotes' ? 'block' : 'none' }}><LotesView /></div>
         <div style={{ display: tab === 'ops' ? 'block' : 'none' }}><OperacionesView /></div>

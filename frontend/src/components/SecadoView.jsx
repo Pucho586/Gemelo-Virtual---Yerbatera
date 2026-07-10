@@ -10,7 +10,7 @@ import { useAuth, isAdmin } from '../lib/auth';
 import { api } from '../lib/api';
 import { Drop } from '@phosphor-icons/react';
 
-export default function SecadoView({ state, series, mimicStyle = 'svg' }) {
+export default function SecadoView({ state, series, mimicStyle = 'svg', animated = true }) {
   const { user } = useAuth();
   const admin = isAdmin(user);
   const s = state?.secado;
@@ -36,7 +36,7 @@ export default function SecadoView({ state, series, mimicStyle = 'svg' }) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-px hair-grid">
       <Card className="lg:col-span-2 p-0" testid="secado-mimic-card">
         <CardHeader title="Secado · Mímico" subtitle="vel.aire afecta T (enfriamiento) y la velocidad de descenso de HR" />
-        <div className="p-4">{mimicStyle === 'pid' ? <SecadoPid data={s} /> : <SecadoMimic data={s} />}</div>
+        <div className="p-4">{mimicStyle === 'pid' ? <SecadoPid data={s} /> : <SecadoMimic data={s} animated={animated} />}</div>
       </Card>
 
       <Card className="p-6" testid="secado-controls-card">

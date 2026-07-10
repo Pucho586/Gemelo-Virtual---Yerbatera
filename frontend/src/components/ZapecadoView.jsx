@@ -10,7 +10,7 @@ import { useAuth, isAdmin } from '../lib/auth';
 import { api } from '../lib/api';
 import { Fire } from '@phosphor-icons/react';
 
-export default function ZapecadoView({ state, series, mimicStyle = 'svg' }) {
+export default function ZapecadoView({ state, series, mimicStyle = 'svg', animated = true }) {
   const { user } = useAuth();
   const admin = isAdmin(user);
   const z = state?.zapecado;
@@ -37,7 +37,7 @@ export default function ZapecadoView({ state, series, mimicStyle = 'svg' }) {
       <Card className="lg:col-span-2 p-0" testid="zapecado-mimic-card">
         <CardHeader title="Zapecado · Mímico en vivo" subtitle="T real, SP efectivo y rpm del tambor real" />
         <div className="p-4">
-          {mimicStyle === 'pid' ? <ZapecadoPid data={z} /> : <ZapecadoMimic data={z} />}
+          {mimicStyle === 'pid' ? <ZapecadoPid data={z} /> : <ZapecadoMimic data={z} animated={animated} />}
         </div>
       </Card>
 

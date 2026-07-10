@@ -9,7 +9,7 @@ import { api } from '../lib/api';
 import { useAuth, isAdmin } from '../lib/auth';
 import { Cloud, Drop, Thermometer, Fan, Plus, Minus } from '@phosphor-icons/react';
 
-function ChamberCard({ cam, idx, mimicStyle }) {
+function ChamberCard({ cam, idx, mimicStyle, animated = true }) {
   const { user } = useAuth();
   const admin = isAdmin(user);
   const [carga, setCarga] = useLocalSync(cam.carga_kg);
@@ -43,7 +43,7 @@ function ChamberCard({ cam, idx, mimicStyle }) {
         {/* COLUMNA IZQUIERDA: Mímico + lecturas REAL vs SP */}
         <div className="space-y-3">
           <div className="border" style={{ borderColor: 'var(--border)' }}>
-            {mimicStyle === 'pid' ? <CamaraPid data={cam} /> : <CamaraMimic data={cam} />}
+            {mimicStyle === 'pid' ? <CamaraPid data={cam} /> : <CamaraMimic data={cam} animated={animated} />}
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="border p-2" style={{ borderColor: 'var(--border)' }}>
@@ -132,7 +132,7 @@ function ChamberCard({ cam, idx, mimicStyle }) {
   );
 }
 
-export default function CamarasView({ state, series, mimicStyle = 'svg' }) {
+export default function CamarasView({ state, series, mimicStyle = 'svg', animated = true }) {
   const { user } = useAuth();
   const admin = isAdmin(user);
   const camaras = state?.camaras || [];
@@ -182,7 +182,7 @@ export default function CamarasView({ state, series, mimicStyle = 'svg' }) {
 
       <div className="grid grid-cols-1 gap-px hair-grid">
         {camaras.map((cam, i) => (
-          <ChamberCard key={i} cam={cam} idx={i} mimicStyle={mimicStyle} />
+          <ChamberCard key={i} cam={cam} idx={i} mimicStyle={mimicStyle} animated={animated} />
         ))}
       </div>
 

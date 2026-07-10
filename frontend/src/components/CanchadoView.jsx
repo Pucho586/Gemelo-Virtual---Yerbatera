@@ -10,7 +10,7 @@ import { useAuth, isAdmin } from '../lib/auth';
 import { api } from '../lib/api';
 import { Cube } from '@phosphor-icons/react';
 
-export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
+export default function CanchadoView({ state, series, mimicStyle = 'svg', animated = true }) {
   const { user } = useAuth();
   const admin = isAdmin(user);
   const c = state?.canchado;
@@ -34,7 +34,7 @@ export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-px hair-grid">
       <Card className="lg:col-span-2 p-0" testid="canchado-mimic-card">
         <CardHeader title="Canchado · Mímico" subtitle="rpm REAL (no SP) — si apagás el molino se ve detenido" />
-        <div className="p-4">{mimicStyle === 'pid' ? <CanchadoPid data={c} /> : <CanchadoMimic data={c} />}</div>
+        <div className="p-4">{mimicStyle === 'pid' ? <CanchadoPid data={c} /> : <CanchadoMimic data={c} animated={animated} />}</div>
       </Card>
 
       <Card className="p-6" testid="canchado-controls-card">
