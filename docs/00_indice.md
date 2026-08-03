@@ -20,6 +20,7 @@ Esta documentación está organizada por **rol de lector**. Empezá por el manua
 | **05** | `manual_tecnico.md` | Desarrollador · DevOps · Integrador instrumentación | Arquitectura completa: layout de carpetas, modelo físico, mapeo Modbus/OPC UA, schemas Mongo, JWT, alarmas ISA-18.2, OEE, reportes PDF. |
 | **06** | `instructivo_nodered.md` | Integrador · Ingeniero de control | Conectar **Node-RED** y cámaras de maduración remotas vía MQTT al gemelo (modo bidireccional). Flow examples + troubleshooting. |
 | **07** | `manual_control_plc_scada.md` | Alumno · Docente de automatización | Controlar el proceso desde un **PLC** y visualizar/operar desde un **SCADA**. Variables de entrada/salida, **nomenclatura Modbus clásica** (Modicon `40001`/`00001`, unit id, escalas), los 4 sistemas de control por etapa (Manual/ON-OFF/PID/PLC externo), **modo multiusuario (bancos)** y **panel del docente** (monitoreo, inyección de fallas, reset, consignas). |
+| **08** | `08_ficha_alumno.md` | Alumno (imprimible) | Ficha de una página para repartir el primer día: tu banco, tus puertos, direcciones Modbus esenciales, checklist de la práctica y troubleshooting rápido. |
 
 ---
 
