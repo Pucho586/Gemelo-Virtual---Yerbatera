@@ -1,10 +1,25 @@
-"""Runtime: orquesta simulador + Modbus + MQTT + OPC UA + clima + persistencia."""
+"""Runtime: orquesta simulador + Modbus + MQTT + OPC UA + clima + persistencia.
+
+Multiusuario ("bancos"): el mismo backend puede correr N instancias aisladas
+del gemelo (una por alumno/grupo). Cada banco tiene su propio simulador y sus
+propios servidores industriales en puertos desplazados:
+
+    Modbus TCP : 5020 + offset
+    OPC UA     : 4840 + offset
+    MQTT       : mismo broker, prefijo de topic  yerba/b<id>/...
+
+El banco "default" (offset 0) conserva exactamente el comportamiento y los
+puertos históricos (Modbus 5020, OPC 4840, MQTT yerba/). Ver WorkbenchManager.
+"""
 import asyncio
+import contextvars
+import copy
 import logging
 import threading
 import time
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -54,10 +69,38 @@ def save_config(cfg: Dict[str, Any]):
 
 
 class TwinRuntime:
-    """Singleton-ish: arranca todos los componentes y mantiene su estado."""
+    """Un "banco de trabajo": simulador + servidores industriales aislados.
 
-    def __init__(self):
-        self.config: Dict[str, Any] = load_config()
+    Args:
+        bank_id:   identificador del banco ("default" para el histórico).
+        offset:    desplazamiento de puertos (0 = puertos históricos).
+        name:      nombre visible del banco (ej. "Banco 3").
+        student:   alumno/grupo asignado (opcional).
+        persist:   si guarda config_yerba.yaml y corre persistencia a disco.
+                   Solo el banco "default" persiste; el resto es en memoria para
+                   no pisar los archivos compartidos.
+    """
+
+    def __init__(self, bank_id: str = "default", offset: int = 0,
+                 name: Optional[str] = None, student: Optional[str] = None,
+                 persist: bool = True):
+        self.bank_id = bank_id
+        self.offset = int(offset)
+        self.name = name or ("Principal" if bank_id == "default" else f"Banco {bank_id}")
+        self.student: Optional[str] = student
+        self.persist = persist
+        self.frozen: bool = False
+        self.created_at = datetime.now(timezone.utc).isoformat()
+        # Consigna del docente para este banco (ejercicio a resolver).
+        self.consigna: Dict[str, Any] = {}
+
+        base_cfg = load_config()
+        # El banco default usa el config tal cual (y lo persiste). Los demás
+        # trabajan sobre una copia en memoria con puertos desplazados.
+        self.config: Dict[str, Any] = base_cfg if bank_id == "default" else copy.deepcopy(base_cfg)
+        if self.offset:
+            self._apply_port_offset()
+
         self.simulator = YerbaProcessSimulator(self.config)
         self.ai = AIService(config=self.config.get("ai"))
 
@@ -98,13 +141,93 @@ class TwinRuntime:
             "mqtt_subscriber": {"running": False, "error": None, "broker": None},
         }
 
+    # ---------- Config por banco ----------
+    def _apply_port_offset(self):
+        """Desplaza los puertos industriales según offset (bancos no-default)."""
+        mb = self.config.setdefault("modbus", {})
+        mb["port"] = int(mb.get("port", 5020)) + self.offset
+        op = self.config.setdefault("opcua", {})
+        op["port"] = int(op.get("port", 4840)) + self.offset
+        mq = self.config.setdefault("mqtt", {})
+        base_topic = mq.get("topic", "yerba")
+        mq["topic"] = f"{base_topic}/b{self.bank_id}"
+        # Bancos no-default no persisten a disco (evita pisar archivos globales).
+        self.config.setdefault("persistence", {})["enabled"] = False
+
+    def ports(self) -> Dict[str, Any]:
+        mb = self.config.get("modbus", {})
+        op = self.config.get("opcua", {})
+        mq = self.config.get("mqtt", {})
+        return {
+            "modbus": mb.get("port", 5020),
+            "opcua": op.get("port", 4840),
+            "mqtt_prefix": mq.get("topic", "yerba"),
+        }
+
+    # ---------- Control de banco (docente) ----------
+    def set_frozen(self, frozen: bool):
+        self.frozen = bool(frozen)
+
+    def reset(self):
+        """Reinicia el simulador de este banco a su estado inicial.
+
+        Reconstruye el simulador desde el config y re-apunta los servidores
+        industriales al nuevo simulador (mantienen sus puertos/conexiones).
+        """
+        self.simulator = YerbaProcessSimulator(self.config)
+        for srv in (self.modbus, self.mqtt, self.opcua):
+            if srv is not None and hasattr(srv, "simulador"):
+                srv.simulador = self.simulator
+        if self.replay is not None:
+            self.replay.simulator = self.simulator
+        if self.whatif is not None:
+            self.whatif.simulator = self.simulator
+        if self.mass_flow is not None:
+            self.mass_flow.simulator = self.simulator
+        logger.info(f"[banco {self.bank_id}] simulador reiniciado")
+
+    def set_consigna(self, consigna: Dict[str, Any]):
+        self.consigna = consigna or {}
+
+    def overview_snapshot(self) -> Dict[str, Any]:
+        """Resumen liviano para el panel del docente (sin volcar todo el estado)."""
+        s = self.simulator
+        try:
+            cams = getattr(s, "camaras", []) or []
+            snap = {
+                "zapecado_temp": round(getattr(s.zapecado, "temperatura", 0.0), 1),
+                "zapecado_sp": s.zapecado.temperatura_obj,
+                "zapecado_mode": getattr(s.zapecado, "control_mode", None),
+                "secado_temp": round(getattr(s.secado, "temperatura", 0.0), 1),
+                "secado_hum": round(getattr(s.secado, "humedad", 0.0), 1),
+                "canchado_part": round(getattr(s.canchado, "tamano_particula", 0.0), 2),
+                "camaras": len(cams),
+                "mode": getattr(s, "mode", None),
+                "aceleracion": getattr(s, "aceleracion", 1.0),
+            }
+        except Exception:
+            snap = {}
+        return {
+            "id": self.bank_id,
+            "name": self.name,
+            "student": self.student,
+            "created_at": self.created_at,
+            "frozen": self.frozen,
+            "offset": self.offset,
+            "ports": self.ports(),
+            "consigna": self.consigna,
+            "services": {k: v.get("running") for k, v in self.service_status.items()},
+            "snapshot": snap,
+        }
+
     # ---------- Bucle de simulación ----------
     def _sim_loop(self):
         while True:
             try:
-                self.simulator.update()
+                if not self.frozen:
+                    self.simulator.update()
             except Exception as e:
-                logger.error(f"sim update error: {e}")
+                logger.error(f"[banco {self.bank_id}] sim update error: {e}")
             time.sleep(max(0.05, 1.0 / max(self.simulator.aceleracion, 1.0)))
 
     def start_simulation(self):
@@ -337,16 +460,119 @@ class TwinRuntime:
             self.service_status["persistence"]["interval"] = self.persistence.interval
             self.service_status["persistence"]["enabled"] = self.persistence.enabled
 
-        save_config(self.config)
+        if self.persist:
+            save_config(self.config)
         return self.config
 
 
-# Singleton global
-runtime: TwinRuntime | None = None
+# ---------------------------------------------------------------------------
+# Gestor de bancos (multiusuario)
+# ---------------------------------------------------------------------------
+
+# Banco activo para la request en curso (lo fija un middleware desde el header
+# X-Bank-Id / query ?bank= / cookie). Los loops de fondo usan el default.
+_current_bank: contextvars.ContextVar[str] = contextvars.ContextVar("bank", default="default")
+
+
+class WorkbenchManager:
+    """Mantiene N bancos aislados. El banco 'default' es el histórico."""
+
+    def __init__(self):
+        self.banks: Dict[str, TwinRuntime] = {}
+        self._used_offsets: set[int] = set()
+        self._seq: int = 0
+
+    # ---- ciclo de vida ----
+    def ensure_default(self) -> TwinRuntime:
+        if "default" not in self.banks:
+            bank = TwinRuntime(bank_id="default", offset=0, persist=True)
+            self.banks["default"] = bank
+            self._used_offsets.add(0)
+        return self.banks["default"]
+
+    def _alloc_offset(self) -> int:
+        off = 1
+        while off in self._used_offsets:
+            off += 1
+        self._used_offsets.add(off)
+        return off
+
+    def get(self, bank_id: Optional[str] = None) -> TwinRuntime:
+        bid = bank_id or _current_bank.get()
+        return self.banks.get(bid) or self.ensure_default()
+
+    def exists(self, bank_id: str) -> bool:
+        return bank_id in self.banks
+
+    def list(self) -> List[TwinRuntime]:
+        # default primero, resto por offset
+        return sorted(self.banks.values(), key=lambda b: (b.bank_id != "default", b.offset))
+
+    def create(self, name: Optional[str] = None, student: Optional[str] = None,
+               bank_id: Optional[str] = None) -> TwinRuntime:
+        self._seq += 1
+        bid = bank_id or str(self._seq)
+        if bid in self.banks:
+            raise ValueError(f"El banco '{bid}' ya existe")
+        offset = self._alloc_offset()
+        bank = TwinRuntime(bank_id=bid, offset=offset, name=name, student=student, persist=False)
+        # Arranca simulación + servidores industriales (puertos desplazados).
+        bank.start_all()
+        self.banks[bid] = bank
+        logger.info(f"Banco creado id={bid} offset={offset} ports={bank.ports()}")
+        return bank
+
+    async def create_async(self, name: Optional[str] = None, student: Optional[str] = None,
+                           bank_id: Optional[str] = None) -> TwinRuntime:
+        bank = self.create(name=name, student=student, bank_id=bank_id)
+        try:
+            await bank.start_async_services()
+        except Exception as e:
+            logger.warning(f"Banco {bank.bank_id}: servicios async fallaron: {e}")
+        return bank
+
+    def delete(self, bank_id: str):
+        if bank_id == "default":
+            raise ValueError("No se puede eliminar el banco principal")
+        bank = self.banks.pop(bank_id, None)
+        if bank is None:
+            raise KeyError(bank_id)
+        self._used_offsets.discard(bank.offset)
+        # Los servidores corren en threads daemon; detenerlos limpio es best-effort.
+        for srv in (bank.modbus, bank.mqtt, bank.opcua):
+            try:
+                stop = getattr(srv, "stop", None)
+                if callable(stop):
+                    stop()
+            except Exception:
+                pass
+        logger.info(f"Banco eliminado id={bank_id}")
+
+
+# Instancia global del gestor
+_manager: Optional[WorkbenchManager] = None
+
+
+def get_manager() -> WorkbenchManager:
+    global _manager
+    if _manager is None:
+        _manager = WorkbenchManager()
+        _manager.ensure_default()
+    return _manager
+
+
+def set_current_bank(bank_id: Optional[str]) -> Any:
+    """Fija el banco activo para el contexto actual. Devuelve el token para reset."""
+    return _current_bank.set(bank_id or "default")
+
+
+def reset_current_bank(token: Any):
+    try:
+        _current_bank.reset(token)
+    except Exception:
+        pass
 
 
 def get_runtime() -> TwinRuntime:
-    global runtime
-    if runtime is None:
-        runtime = TwinRuntime()
-    return runtime
+    """Runtime del banco activo (o default). Compatible con el código existente."""
+    return get_manager().get()

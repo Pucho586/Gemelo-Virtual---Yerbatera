@@ -44,7 +44,108 @@ Sí: **las variables son de entrada Y de salida**. Es la base de la práctica.
 - En **OPC UA**, las **MV/SP/comandos** son nodos con `Writable`; las **PV** son solo-lectura.
 - En **MQTT**, el gemelo **publica** las PV en `yerba/...` y se **suscribe** a comandos en `yerba_in/...`.
 
-> **El direccionamiento exacto** (registro Modbus, nodo OPC UA, topic MQTT) de cada variable está en la app: **Integración → Protocolos → Variables expuestas**. Ahí ves, para cada variable, su unit/registro, su nodo `Objeto.Variable` y su topic.
+---
+
+## 2.1. Nomenclatura Modbus clásica (Modicon)
+
+En un PLC/SCADA real las direcciones Modbus **no** se escriben como "holding register 5". Se usa la **notación Modicon de 5 dígitos**, donde el primer dígito indica el *tipo* de dato y el resto es el número de referencia **base 1**:
+
+| Rango Modicon | Tipo de dato | Función Modbus | Acceso | Uso en el gemelo |
+|---------------|--------------|----------------|--------|------------------|
+| `0xxxx` (00001…) | **Coil** (salida discreta) | 01 leer / 05·15 escribir | Lectura **y** escritura | Comandos / fallas (on-off) |
+| `1xxxx` (10001…) | Discrete Input (entrada discreta) | 02 leer | Solo lectura | *(no usado)* |
+| `3xxxx` (30001…) | Input Register | 04 leer | Solo lectura | *(no usado)* |
+| `4xxxx` (40001…) | **Holding Register** | 03 leer / 06·16 escribir | Lectura **y** escritura | PV, MV, SP, parámetros |
+
+> **Cómo se traduce**: el *holding register* interno **HR0** es la referencia **40001**; **HR5** es **40006** (40001 + 5). El *coil* interno **C0** es **00001**. Es decir: **Modicon = 40001 + índice** (registros) o **00001 + índice** (coils).
+
+**Dos aclaraciones importantes de esta implementación:**
+
+1. El gemelo publica **todas las medidas (PV) en holding registers `4xxxx`**, no en input registers `3xxxx`. Esto es a propósito: así el PLC lee todo por función 03 y no hay que mezclar áreas. Si tu SCADA espera las PV en `3xxxx`, mapealas igual a `4xxxx` (son de solo lectura *por convención*: el gemelo las pisa en cada ciclo, no las escribas).
+2. Los valores enteros vienen **escalados**: casi todo es **×10** (un decimal), la **partícula del canchado es ×100** (dos decimales), y `CO₂`, `carga` y `throughput` van **sin escala**. Ejemplos: en Zapecado `40001 = 4203` → **420.3 °C**; en Canchado `40002 = 375` → **3.75 mm**. Siempre **dividí por el factor** al leer y **multiplicá** al escribir.
+
+### Selección de equipo: `unit id` (slave id)
+
+Cada etapa/cámara es una **unidad Modbus distinta** (campo *unit id* / *slave id* del frame). Con **una sola IP:puerto** (`:5020`) accedés a todas cambiando el unit id:
+
+| Unit id | Equipo |
+|---------|--------|
+| `0` | Zapecado (horno) |
+| `1` | Secado |
+| `2` | Canchado (molino) |
+| `3` … `14` | Cámaras de maduración 1 … 12 |
+| `20` `21` `22` | Escenarios *what-if* 1 · 2 · 3 |
+| `100` | Globales (aceleración, throughput) |
+
+---
+
+## 2.2. Mapa de direcciones por equipo
+
+Referencias en **Modicon** (base 1). `R` = solo lectura (PV/estado), `R/W` = el PLC puede escribir (MV/SP/comando). El resto de los holding registers de cada unidad exponen el estado del PID interno (kp, ki, kd, salida) como solo lectura.
+
+### Unit id 0 — Zapecado
+
+| Referencia | Variable | Escala | Acceso | Tipo |
+|-----------|----------|--------|--------|------|
+| `40001` | Temperatura del horno | ×10 | R | PV |
+| `40002` | Velocidad de tambor | ×1 | R/W | MV |
+| `40003` | Velocidad de chips (alimentación) | ×1 | R/W | MV |
+| `40006` | Temperatura objetivo (0 = auto) | ×10 | R/W | SP |
+| `40005` | Setpoint efectivo | ×10 | R | — |
+| `40013` | Velocidad de chips **real** | ×10 | R | MV real |
+| `40014` | Velocidad de tambor **real** | ×10 | R | MV real |
+| `00001` | Falla quemador | — | R/W | Comando |
+| `00002` | Falla motor de tambor | — | R/W | Comando |
+
+### Unit id 1 — Secado
+
+| Referencia | Variable | Escala | Acceso | Tipo |
+|-----------|----------|--------|--------|------|
+| `40001` | Temperatura | ×10 | R | PV |
+| `40002` | Humedad relativa | ×10 | R | PV |
+| `40003` | Velocidad de aire | ×10 | R/W | MV |
+| `40008` | Posición del calefactor | ×10 | R/W | MV |
+| `40005` | Temperatura objetivo | ×10 | R/W | SP |
+| `40006` | Humedad objetivo | ×10 | R/W | SP |
+| `00001` | Falla ventilador | — | R/W | Comando |
+| `00002` | Falla serpentín / calefactor | — | R/W | Comando |
+
+### Unit id 2 — Canchado
+
+| Referencia | Variable | Escala | Acceso | Tipo |
+|-----------|----------|--------|--------|------|
+| `40001` | Velocidad del molino | ×10 | R/W | MV |
+| `40002` | Tamaño de partícula | **×100** | R | PV |
+| `40004` | Tamaño de partícula objetivo (0 = auto) | **×100** | R/W | SP |
+| `40005` | Setpoint de partícula efectivo | **×100** | R | — |
+| `00001` | Falla motor del molino | — | R/W | Comando |
+| `00002` | Rodamiento caliente | — | R/W | Comando |
+
+### Unit id 3…14 — Cámaras de maduración
+
+| Referencia | Variable | Escala | Acceso | Tipo |
+|-----------|----------|--------|--------|------|
+| `40001` | Temperatura | ×10 | R | PV |
+| `40002` | Humedad relativa | ×10 | R | PV |
+| `40003` | CO₂ | ×1 | R | PV |
+| `40004` | Temperatura objetivo | ×10 | R/W | SP |
+| `40005` | Humedad objetivo | ×10 | R/W | SP |
+| `40010` | Vapor activo (0/1) | ×1 | R/W | MV |
+| `40011` | Caudal de vapor | ×10 | R/W | MV |
+| `00001` | Falla ventilador | — | R/W | Comando |
+| `00002` | Fuga de vapor | — | R/W | Comando |
+| `00003` | Puerta abierta | — | R/W | Comando |
+
+> Cámara *n* → unit id `n + 2` (Cámara 1 = unit 3, Cámara 2 = unit 4, … Cámara 12 = unit 14).
+
+### Unit id 100 — Globales
+
+| Referencia | Variable | Escala | Acceso |
+|-----------|----------|--------|--------|
+| `40001` | Aceleración de simulación | ×10 | R/W |
+| `40002` | Throughput (kg/h) | ×1 | R/W |
+
+> **OPC UA / MQTT**: las mismas variables se exponen como nodos `Objeto.Variable` (OPC UA, con `Writable` en las MV/SP/comando) y como topics `yerba/<etapa>/<variable>` (publicación de PV) / `yerba_in/<etapa>/<variable>` (suscripción a comandos). El direccionamiento vivo y por variable está en la app: **Integración → Protocolos → Variables expuestas**.
 
 ---
 
@@ -90,14 +191,14 @@ Además, para que las escrituras externas se apliquen, el **modo del gemelo** (b
 **Consigna**: mantener el zapecado en 450 °C con un control hecho en el PLC.
 
 1. Zapecado → **Sistema de control: PLC externo**. Modo del gemelo: **Gemelo**.
-2. Protocolo Modbus activado. En **Protocolos** anotás (ejemplo — verificá los valores reales en la app):
-   - **PV** — `zapecado.temperatura` (registro de lectura).
-   - **MV** — `velocidad_chip` (registro de escritura).
-3. En el PLC:
-   - `T := leer(PV zapecado.temperatura)`
+2. Protocolo Modbus activado. Zapecado es **unit id 0** (ver §2.2):
+   - **PV** — Temperatura del horno → **`40001`** (holding register, ×10, solo lectura).
+   - **MV** — Velocidad de chips → **`40003`** (holding register, ×1, escribible).
+3. En el PLC (unit id 0):
+   - `T := leer_HR(40001) / 10.0`   *(divido por la escala ×10)*
    - `error := 450 - T`
    - `chips := PID(error)`  *(tu algoritmo)*
-   - `escribir(MV velocidad_chip, chips)`
+   - `escribir_HR(40003, chips)`
 4. El gemelo recibe la nueva `velocidad_chip`, calcula el balance térmico y actualiza la temperatura. Tu SCADA grafica `zapecado.temperatura` subiendo hacia 450 °C.
 
 Si en vez de programar el PID en el PLC querés compararlo con el PID interno del gemelo, cambiá el modo a **PID** y sintonizá Kp/Ki/Kd desde la misma pantalla.
