@@ -90,3 +90,58 @@ class PID:
             self.enabled = new_enabled
         if reset:
             self.reset()
+
+
+@dataclass
+class OnOff:
+    """Controlador todo-o-nada (bang-bang) con histéresis.
+
+    Enciende la manipulada a `out_high` o la apaga a `out_low` según la
+    medida cruce la banda muerta alrededor del setpoint. Es el control
+    clásico de un termostato: simple, sin sintonía.
+    """
+    enabled: bool = False
+    sp: float = 0.0
+    hysteresis: float = 5.0     # ancho de la banda muerta (unidades de pv)
+    out_high: float = 100.0     # MV cuando el controlador "enciende"
+    out_low: float = 0.0        # MV cuando "apaga"
+    direct_action: bool = True  # True: enciende (calienta) si pv < sp
+    state_on: bool = False
+    last_output: float = 0.0
+
+    def step(self, pv: float, dt: float = 0.0) -> Optional[float]:
+        if not self.enabled:
+            return None
+        half = max(0.0, self.hysteresis) / 2.0
+        if self.direct_action:  # calentar / subir la pv
+            if pv < self.sp - half:
+                self.state_on = True
+            elif pv > self.sp + half:
+                self.state_on = False
+        else:  # enfriar / bajar la pv
+            if pv > self.sp + half:
+                self.state_on = True
+            elif pv < self.sp - half:
+                self.state_on = False
+        out = self.out_high if self.state_on else self.out_low
+        self.last_output = out
+        return out
+
+    def to_dict(self) -> dict:
+        return {
+            "enabled": self.enabled, "sp": self.sp,
+            "hysteresis": self.hysteresis,
+            "out_high": self.out_high, "out_low": self.out_low,
+            "direct_action": self.direct_action,
+            "state_on": self.state_on,
+            "last_output": round(self.last_output, 3),
+        }
+
+    def update_params(self, *, sp=None, hysteresis=None, out_high=None,
+                      out_low=None, direct_action=None, enabled=None):
+        if sp is not None: self.sp = float(sp)
+        if hysteresis is not None: self.hysteresis = float(hysteresis)
+        if out_high is not None: self.out_high = float(out_high)
+        if out_low is not None: self.out_low = float(out_low)
+        if direct_action is not None: self.direct_action = bool(direct_action)
+        if enabled is not None: self.enabled = bool(enabled)

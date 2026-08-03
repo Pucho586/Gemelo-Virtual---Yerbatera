@@ -31,7 +31,9 @@ from twin.calibration import apply_calibration_to_simulator, calibrate_from_csv 
 from twin.operations import OperationsService  # noqa: E402
 from twin.recipes import apply_recipe_to_simulator, get_default_recipes  # noqa: E402
 from twin.reports import build_batch_report, build_monthly_report  # noqa: E402
-from twin.runtime import get_runtime  # noqa: E402
+from twin.runtime import (  # noqa: E402
+    get_runtime, get_manager, set_current_bank, reset_current_bank,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger("yerba")
@@ -100,6 +102,31 @@ app.add_middleware(
 )
 
 
+@app.middleware("http")
+async def bank_context_middleware(request: Request, call_next):
+    """Resuelve el banco activo por request (header X-Bank-Id / ?bank= / cookie).
+
+    Así los endpoints existentes (que usan get_runtime()) operan sobre el banco
+    del alumno sin cambiar cada handler. Si el banco no existe, cae al default.
+    """
+    bank_id = (
+        request.headers.get("X-Bank-Id")
+        or request.query_params.get("bank")
+        or request.cookies.get("bank_id")
+        or "default"
+    )
+    mgr = get_manager()
+    if not mgr.exists(bank_id):
+        bank_id = "default"
+    token = set_current_bank(bank_id)
+    try:
+        response = await call_next(request)
+    finally:
+        reset_current_bank(token)
+    response.headers["X-Bank-Id"] = bank_id
+    return response
+
+
 # ---------- Auth dependency wrappers ----------
 async def current_user_dep(request: Request) -> Dict[str, Any]:
     return await get_current_user(request, db)
@@ -109,6 +136,14 @@ async def admin_only(request: Request) -> Dict[str, Any]:
     user = await get_current_user(request, db)
     if user.get("role") != "admin":
         raise HTTPException(403, "Requiere rol admin")
+    return user
+
+
+async def docente_only(request: Request) -> Dict[str, Any]:
+    """Docente o admin: gestión de bancos de alumnos (panel del docente)."""
+    user = await get_current_user(request, db)
+    if user.get("role") not in ("admin", "docente"):
+        raise HTTPException(403, "Requiere rol docente")
     return user
 
 
@@ -141,6 +176,15 @@ class PidPatch(BaseModel):
     reset: Optional[bool] = None
 
 
+class OnOffPatch(BaseModel):
+    enabled: Optional[bool] = None
+    sp: Optional[float] = None
+    hysteresis: Optional[float] = None
+    out_high: Optional[float] = None
+    out_low: Optional[float] = None
+    direct_action: Optional[bool] = None
+
+
 class ZapecadoPatch(BaseModel):
     velocidad_tambor: Optional[float] = None
     velocidad_chip: Optional[float] = None
@@ -149,7 +193,9 @@ class ZapecadoPatch(BaseModel):
     tau: Optional[float] = None
     falla_quemador: Optional[bool] = None
     falla_motor_tambor: Optional[bool] = None
+    control_mode: Optional[str] = None
     pid: Optional[PidPatch] = None
+    onoff: Optional[OnOffPatch] = None
 
 
 class SecadoPatch(BaseModel):
@@ -161,8 +207,12 @@ class SecadoPatch(BaseModel):
     tau_t: Optional[float] = None
     falla_ventilador: Optional[bool] = None
     falla_serpentin: Optional[bool] = None
+    control_mode_t: Optional[str] = None
+    control_mode_h: Optional[str] = None
     pid_t: Optional[PidPatch] = None
     pid_h: Optional[PidPatch] = None
+    onoff_t: Optional[OnOffPatch] = None
+    onoff_h: Optional[OnOffPatch] = None
 
 
 class CanchadoPatch(BaseModel):
@@ -172,7 +222,9 @@ class CanchadoPatch(BaseModel):
     tau_p: Optional[float] = None
     falla_motor: Optional[bool] = None
     rodamiento_caliente: Optional[bool] = None
+    control_mode: Optional[str] = None
     pid: Optional[PidPatch] = None
+    onoff: Optional[OnOffPatch] = None
 
 
 class CamaraPatch(BaseModel):
@@ -190,7 +242,9 @@ class CamaraPatch(BaseModel):
     falla_ventilador: Optional[bool] = None
     fuga_vapor: Optional[bool] = None
     puerta_abierta: Optional[bool] = None
+    control_mode: Optional[str] = None
     pid_t: Optional[PidPatch] = None
+    onoff: Optional[OnOffPatch] = None
 
 
 class CamarasCountBody(BaseModel):
@@ -816,7 +870,10 @@ async def audit_log(limit: int = 200, username: Optional[str] = None, user=Depen
 @app.websocket("/api/ws")
 async def ws_stream(websocket: WebSocket):
     await websocket.accept()
-    rt = get_runtime()
+    # El middleware HTTP no corre para websockets: resolvemos el banco por query.
+    bank_id = websocket.query_params.get("bank", "default")
+    mgr = get_manager()
+    rt = mgr.get(bank_id) if mgr.exists(bank_id) else mgr.get("default")
     try:
         while True:
             state = rt.simulator.get_state()
@@ -1345,6 +1402,132 @@ async def docs_get(name: str):
         raise HTTPException(404, "Documento no encontrado")
     with open(path, "r", encoding="utf-8") as f:
         return {"name": name, "content": f.read()}
+
+
+# ---------- BANCOS / DOCENTE (multiusuario) ----------
+class BankCreateBody(BaseModel):
+    name: Optional[str] = None
+    student: Optional[str] = None
+    bank_id: Optional[str] = None
+
+
+class BankFreezeBody(BaseModel):
+    frozen: bool = True
+
+
+class BankConsignaBody(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    target: Optional[Dict[str, Any]] = None
+    stage: Optional[str] = None
+
+
+class BankInjectBody(BaseModel):
+    stage: str                       # zapecado | secado | canchado | camara | sim
+    index: Optional[int] = None      # solo cámara
+    patch: Dict[str, Any] = Field(default_factory=dict)
+
+
+def _bank_or_404(bank_id: str):
+    mgr = get_manager()
+    if not mgr.exists(bank_id):
+        raise HTTPException(404, f"Banco '{bank_id}' no existe")
+    return mgr.get(bank_id)
+
+
+@api.get("/banks")
+async def list_banks(user=Depends(current_user_dep)):
+    """Lista los bancos con un resumen en vivo (para el panel del docente)."""
+    mgr = get_manager()
+    return [b.overview_snapshot() for b in mgr.list()]
+
+
+@api.post("/banks")
+async def create_bank(body: BankCreateBody, request: Request, user=Depends(docente_only)):
+    mgr = get_manager()
+    try:
+        bank = await mgr.create_async(name=body.name, student=body.student, bank_id=body.bank_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    await audit_service.log(user, "bank.create", {"bank_id": bank.bank_id, "name": bank.name}, request)
+    return bank.overview_snapshot()
+
+
+@api.delete("/banks/{bank_id}")
+async def delete_bank(bank_id: str, request: Request, user=Depends(docente_only)):
+    mgr = get_manager()
+    try:
+        mgr.delete(bank_id)
+    except ValueError as e:
+        raise HTTPException(400, str(e))
+    except KeyError:
+        raise HTTPException(404, f"Banco '{bank_id}' no existe")
+    await audit_service.log(user, "bank.delete", {"bank_id": bank_id}, request)
+    return {"ok": True}
+
+
+@api.get("/banks/{bank_id}/state")
+async def bank_state(bank_id: str, user=Depends(current_user_dep)):
+    return _bank_or_404(bank_id).simulator.get_state()
+
+
+@api.post("/banks/{bank_id}/reset")
+async def bank_reset(bank_id: str, request: Request, user=Depends(docente_only)):
+    bank = _bank_or_404(bank_id)
+    bank.reset()
+    await audit_service.log(user, "bank.reset", {"bank_id": bank_id}, request)
+    return bank.overview_snapshot()
+
+
+@api.post("/banks/{bank_id}/freeze")
+async def bank_freeze(bank_id: str, body: BankFreezeBody, request: Request, user=Depends(docente_only)):
+    bank = _bank_or_404(bank_id)
+    bank.set_frozen(body.frozen)
+    await audit_service.log(user, "bank.freeze", {"bank_id": bank_id, "frozen": body.frozen}, request)
+    return bank.overview_snapshot()
+
+
+@api.post("/banks/{bank_id}/consigna")
+async def bank_consigna(bank_id: str, body: BankConsignaBody, request: Request, user=Depends(docente_only)):
+    bank = _bank_or_404(bank_id)
+    bank.set_consigna(body.model_dump(exclude_none=True))
+    await audit_service.log(user, "bank.consigna", {"bank_id": bank_id}, request)
+    return bank.overview_snapshot()
+
+
+@api.post("/banks/{bank_id}/inject")
+async def bank_inject(bank_id: str, body: BankInjectBody, request: Request, user=Depends(docente_only)):
+    """El docente inyecta fallas / cambia parámetros en el banco de un alumno."""
+    bank = _bank_or_404(bank_id)
+    sim = bank.simulator
+    stage = body.stage
+    patch = body.patch or {}
+    try:
+        if stage == "zapecado":
+            sim.set_zapecado(**patch)
+        elif stage == "secado":
+            sim.set_secado(**patch)
+        elif stage == "canchado":
+            sim.set_canchado(**patch)
+        elif stage == "camara":
+            if body.index is None:
+                raise HTTPException(400, "Falta 'index' para inyectar en una cámara")
+            sim.set_camara(int(body.index), **patch)
+        elif stage == "sim":
+            if "aceleracion" in patch:
+                sim.aceleracion = float(patch["aceleracion"])
+            if "throughput_kgh" in patch:
+                sim.throughput_kgh = float(patch["throughput_kgh"])
+            if "mode" in patch:
+                sim.mode = str(patch["mode"])
+        else:
+            raise HTTPException(400, f"Etapa desconocida: {stage}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"No se pudo aplicar: {e}")
+    await audit_service.log(user, "bank.inject", {"bank_id": bank_id, "stage": stage, "patch": patch}, request)
+    return {"ok": True, "snapshot": bank.overview_snapshot()}
 
 
 app.include_router(api)

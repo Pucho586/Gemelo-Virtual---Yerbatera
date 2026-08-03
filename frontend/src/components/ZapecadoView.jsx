@@ -4,12 +4,15 @@ import { ZapecadoChart, flatten } from './Charts';
 import { ZapecadoMimic, ZapecadoPid } from './Mimics';
 import StageBlock from './StageBlock';
 import FaultPanel from './FaultPanel';
-import PidPanel from './PidPanel';
+import ControlSystemPanel from './ControlSystemPanel';
 import { useLocalSync } from '../lib/useLocalSync';
+import { useAuth, isAdmin } from '../lib/auth';
 import { api } from '../lib/api';
 import { Fire } from '@phosphor-icons/react';
 
-export default function ZapecadoView({ state, series, mimicStyle = 'svg' }) {
+export default function ZapecadoView({ state, series, mimicStyle = 'svg', animated = true }) {
+  const { user } = useAuth();
+  const admin = isAdmin(user);
   const z = state?.zapecado;
   const ambient = state?.ambient;
   const faults = z?.faults || {};
@@ -34,7 +37,7 @@ export default function ZapecadoView({ state, series, mimicStyle = 'svg' }) {
       <Card className="lg:col-span-2 p-0" testid="zapecado-mimic-card">
         <CardHeader title="Zapecado · Mímico en vivo" subtitle="T real, SP efectivo y rpm del tambor real" />
         <div className="p-4">
-          {mimicStyle === 'pid' ? <ZapecadoPid data={z} /> : <ZapecadoMimic data={z} />}
+          {mimicStyle === 'pid' ? <ZapecadoPid data={z} /> : <ZapecadoMimic data={z} animated={animated} />}
         </div>
       </Card>
 
@@ -95,12 +98,18 @@ export default function ZapecadoView({ state, series, mimicStyle = 'svg' }) {
       </div>
 
       <div className="lg:col-span-3">
-        <PidPanel
-          title="PID Zapecado · ajusta velocidad chips"
-          pid={z?.pid}
-          manipulada="vel. chips (kg/h)"
-          onApply={(patch) => apply({ pid: patch })}
-          testidBase="zap-pid"
+        <ControlSystemPanel
+          stageLabel="Zapecado"
+          mvLabel="velocidad de chips (kg/h)"
+          spLabel="temperatura"
+          spValue={z?.temperatura_obj != null ? z.temperatura_obj : null}
+          spUnit="°C"
+          control_mode={z?.control_mode}
+          pid={z?.pid || {}}
+          onoff={z?.onoff || {}}
+          onApply={apply}
+          admin={admin}
+          testidBase="zap-ctrl"
         />
       </div>
 

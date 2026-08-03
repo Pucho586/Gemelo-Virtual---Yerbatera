@@ -40,3 +40,5 @@ export function AuthProvider({ children }) {
 
 export const useAuth = () => useContext(AuthCtx);
 export const isAdmin = (user) => user?.role === 'admin';
+// Docente: gestiona bancos de alumnos (el admin también puede)
+export const isDocente = (user) => user?.role === 'docente' || user?.role === 'admin';

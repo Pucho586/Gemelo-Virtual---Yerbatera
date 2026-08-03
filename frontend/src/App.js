@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './App.css';
 import { useLiveState } from './lib/useLiveState';
 import { api } from './lib/api';
-import { AuthProvider, useAuth, isAdmin } from './lib/auth';
+import { AuthProvider, useAuth, isAdmin, isDocente } from './lib/auth';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import ZapecadoView from './components/ZapecadoView';
@@ -15,6 +15,8 @@ import RecetasView from './components/RecetasView';
 import LotesView from './components/LotesView';
 import Industria40View from './components/Industria40View';
 import ProtocolsView from './components/ProtocolsView';
+import DocenteView from './components/DocenteView';
+import BankSelector from './components/BankSelector';
 import OperacionesView from './components/OperacionesView';
 import Fase4View from './components/Fase4View';
 import MassFlowView from './components/MassFlowView';
@@ -22,7 +24,7 @@ import DocsModal from './components/DocsModal';
 import TourModal from './components/TourModal';
 import SpeedControl from './components/SpeedControl';
 import WeatherControl from './components/WeatherControl';
-import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen, GraduationCap, Broadcast } from '@phosphor-icons/react';
+import { Leaf, House, Fire, Drop, Cube, Cloud, Gear, Sparkle, ForkKnife, Package, SignOut, Cpu, Robot, Plugs, ChartLineUp, Bell, Flask, FlowArrow, BookOpen, GraduationCap, Broadcast, Play } from '@phosphor-icons/react';
 
 const TABS = [
   { id: 'dashboard', label: 'Dashboard', Icon: House, role: 'any' },
@@ -38,6 +40,7 @@ const TABS = [
   { id: 'i40', label: 'Industria 4.0', Icon: Plugs, role: 'any' },
   { id: 'fase4', label: 'Replay & What-if', Icon: Flask, role: 'any' },
   { id: 'ia', label: 'IA · Gemini', Icon: Sparkle, role: 'any' },
+  { id: 'docente', label: 'Docente', Icon: GraduationCap, role: 'docente' },
   { id: 'config', label: 'Configuración', Icon: Gear, role: 'admin' },
 ];
 const TAB_META = Object.fromEntries(TABS.map(t => [t.id, t]));
@@ -47,7 +50,7 @@ const GROUPS = [
   { id: 'operacion', label: 'Operación', Icon: House, tabs: ['dashboard', 'massflow', 'recetas', 'lotes'] },
   { id: 'proceso', label: 'Proceso', Icon: Fire, tabs: ['zapecado', 'secado', 'canchado', 'camaras'] },
   { id: 'analisis', label: 'Análisis', Icon: ChartLineUp, tabs: ['ops', 'fase4', 'ia'] },
-  { id: 'integracion', label: 'Integración', Icon: Plugs, tabs: ['protocolos', 'i40', 'config'] },
+  { id: 'integracion', label: 'Integración', Icon: Plugs, tabs: ['protocolos', 'i40', 'docente', 'config'] },
 ];
 
 function ConnDot({ on, disabled, label, testid }) {
@@ -69,6 +72,9 @@ function AuthedApp() {
   const [activeAlarms, setActiveAlarms] = useState(0);
   const [mimicStyle, setMimicStyle] = useState(() => {
     try { return localStorage.getItem('yerba_mimic') || 'svg'; } catch (e) { return 'svg'; }
+  });
+  const [animated, setAnimated] = useState(() => {
+    try { return localStorage.getItem('yerba_animated') !== 'off'; } catch (e) { return true; }
   });
   const [docsOpen, setDocsOpen] = useState(false);
   const [tourOpen, setTourOpen] = useState(false);
@@ -124,7 +130,21 @@ function AuthedApp() {
     try { localStorage.setItem('yerba_mimic', next); } catch (e) { /* ignore */ }
   };
 
-  const canSee = (id) => { const t = TAB_META[id]; return t && (t.role === 'any' || isAdmin(user)); };
+  const toggleAnimated = () => {
+    setAnimated(prev => {
+      const next = !prev;
+      try { localStorage.setItem('yerba_animated', next ? 'on' : 'off'); } catch (e) { /* ignore */ }
+      return next;
+    });
+  };
+
+  const canSee = (id) => {
+    const t = TAB_META[id];
+    if (!t) return false;
+    if (t.role === 'any') return true;
+    if (t.role === 'docente') return isDocente(user);
+    return isAdmin(user);
+  };
   const visibleGroups = GROUPS
     .map(g => ({ ...g, tabs: g.tabs.filter(canSee) }))
     .filter(g => g.tabs.length > 0);
@@ -163,6 +183,7 @@ function AuthedApp() {
               <ConnDot on={status?.mqtt?.running} disabled={status?.mqtt?.disabled} label="MQTT" testid="mqtt-badge" />
               <ConnDot on={status?.opcua?.running} disabled={status?.opcua?.disabled} label="OPC" testid="opcua-badge" />
             </div>
+            <BankSelector />
             <WeatherControl ambient={state?.ambient} weatherStatus={status?.weather} />
             {activeAlarms > 0 && (
               <button onClick={() => setTab('ops')} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-mono uppercase tracking-wider border bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25 transition-colors" data-testid="alarms-badge-header">
@@ -171,6 +192,9 @@ function AuthedApp() {
             )}
             <button onClick={toggleMimic} className="text-xs font-mono text-slate-400 hover:text-amber-300 transition-colors border border-[#232A26] px-2 py-1" data-testid="mimic-toggle" title="Estilo de mímicos">
               {mimicStyle === 'svg' ? 'SVG' : 'P&ID'}
+            </button>
+            <button onClick={toggleAnimated} className={`inline-flex items-center gap-1 text-xs font-mono transition-colors border px-2 py-1 ${animated ? 'text-amber-300 border-amber-500/40' : 'text-slate-500 border-[#232A26]'}`} data-testid="animated-toggle" title={animated ? 'Animaciones activadas — clic para pausar' : 'Animaciones pausadas — clic para activar'}>
+              <Play size={12} weight={animated ? 'fill' : 'regular'} /> {animated ? 'Animación' : 'Estático'}
             </button>
             <SpeedControl />
             <button onClick={() => setTourOpen(true)} className="inline-flex items-center gap-1 text-xs font-mono text-amber-300 hover:text-amber-200 transition-colors border border-amber-500/40 px-2 py-1" data-testid="tour-open-btn" title="Tour guiado de primer turno">
@@ -225,10 +249,10 @@ function AuthedApp() {
       <main className="max-w-[1920px] mx-auto p-4 sm:p-6 lg:p-8" data-testid="main-content">
         <div style={{ display: tab === 'dashboard' ? 'block' : 'none' }}><Dashboard state={state} series={series} status={status} /></div>
         <div style={{ display: tab === 'massflow' ? 'block' : 'none' }}><MassFlowView /></div>
-        <div style={{ display: tab === 'zapecado' ? 'block' : 'none' }}><ZapecadoView state={state} series={series} mimicStyle={mimicStyle} /></div>
-        <div style={{ display: tab === 'secado' ? 'block' : 'none' }}><SecadoView state={state} series={series} mimicStyle={mimicStyle} /></div>
-        <div style={{ display: tab === 'canchado' ? 'block' : 'none' }}><CanchadoView state={state} series={series} mimicStyle={mimicStyle} /></div>
-        <div style={{ display: tab === 'camaras' ? 'block' : 'none' }}><CamarasView state={state} series={series} mimicStyle={mimicStyle} /></div>
+        <div style={{ display: tab === 'zapecado' ? 'block' : 'none' }}><ZapecadoView state={state} series={series} mimicStyle={mimicStyle} animated={animated} /></div>
+        <div style={{ display: tab === 'secado' ? 'block' : 'none' }}><SecadoView state={state} series={series} mimicStyle={mimicStyle} animated={animated} /></div>
+        <div style={{ display: tab === 'canchado' ? 'block' : 'none' }}><CanchadoView state={state} series={series} mimicStyle={mimicStyle} animated={animated} /></div>
+        <div style={{ display: tab === 'camaras' ? 'block' : 'none' }}><CamarasView state={state} series={series} mimicStyle={mimicStyle} animated={animated} /></div>
         <div style={{ display: tab === 'recetas' ? 'block' : 'none' }}><RecetasView /></div>
         <div style={{ display: tab === 'lotes' ? 'block' : 'none' }}><LotesView /></div>
         <div style={{ display: tab === 'ops' ? 'block' : 'none' }}><OperacionesView /></div>
@@ -236,6 +260,9 @@ function AuthedApp() {
         <div style={{ display: tab === 'i40' ? 'block' : 'none' }}><Industria40View /></div>
         <div style={{ display: tab === 'fase4' ? 'block' : 'none' }}><Fase4View /></div>
         <div style={{ display: tab === 'ia' ? 'block' : 'none' }}><AIPanel /></div>
+        {isDocente(user) && (
+          <div style={{ display: tab === 'docente' ? 'block' : 'none' }}><DocenteView /></div>
+        )}
         {isAdmin(user) && (
           <div style={{ display: tab === 'config' ? 'block' : 'none' }}><ConfigView status={status} /></div>
         )}

@@ -3,13 +3,15 @@ import { Card, CardHeader, Metric, Toggle, NumberInput, SectionTitle } from './U
 import { CamarasChart, flatten } from './Charts';
 import { CamaraMimic, CamaraPid } from './Mimics';
 import FaultPanel from './FaultPanel';
-import PidPanel from './PidPanel';
+import ControlSystemPanel from './ControlSystemPanel';
 import { useLocalSync } from '../lib/useLocalSync';
 import { api } from '../lib/api';
 import { useAuth, isAdmin } from '../lib/auth';
 import { Cloud, Drop, Thermometer, Fan, Plus, Minus } from '@phosphor-icons/react';
 
-function ChamberCard({ cam, idx, mimicStyle }) {
+function ChamberCard({ cam, idx, mimicStyle, animated = true }) {
+  const { user } = useAuth();
+  const admin = isAdmin(user);
   const [carga, setCarga] = useLocalSync(cam.carga_kg);
   const [vent, setVent] = useLocalSync(cam.ventilador);
   const [tObj, setTObj] = useLocalSync(cam.temperatura_obj);
@@ -41,7 +43,7 @@ function ChamberCard({ cam, idx, mimicStyle }) {
         {/* COLUMNA IZQUIERDA: Mímico + lecturas REAL vs SP */}
         <div className="space-y-3">
           <div className="border" style={{ borderColor: 'var(--border)' }}>
-            {mimicStyle === 'pid' ? <CamaraPid data={cam} /> : <CamaraMimic data={cam} />}
+            {mimicStyle === 'pid' ? <CamaraPid data={cam} /> : <CamaraMimic data={cam} animated={animated} />}
           </div>
           <div className="grid grid-cols-3 gap-2 text-center">
             <div className="border p-2" style={{ borderColor: 'var(--border)' }}>
@@ -105,12 +107,14 @@ function ChamberCard({ cam, idx, mimicStyle }) {
 
       {/* === PID + FALLAS (todo el ancho) === */}
       <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-px hair-grid">
-        <PidPanel
-          title="PID Temperatura cámara · ajusta vapor"
-          pid={cam.pid_t}
-          manipulada="caudal vapor (kg/h)"
-          onApply={(patch) => apply({ pid_t: patch })}
-          testidBase={`cam-${idx}-pid-t`}
+        <ControlSystemPanel
+          stageLabel={cam.nombre}
+          mvLabel="caudal de vapor (kg/h)"
+          spLabel="temperatura" spValue={cam.temperatura_obj} spUnit="°C"
+          control_mode={cam.control_mode}
+          pid={cam.pid_t || {}} onoff={cam.onoff || {}}
+          onApply={apply} admin={admin} testidBase={`cam-${idx}-ctrl`}
+          applyKeys={{ mode: 'control_mode', pid: 'pid_t', onoff: 'onoff' }}
         />
         <FaultPanel
           title="Inyección de fallas"
@@ -128,7 +132,7 @@ function ChamberCard({ cam, idx, mimicStyle }) {
   );
 }
 
-export default function CamarasView({ state, series, mimicStyle = 'svg' }) {
+export default function CamarasView({ state, series, mimicStyle = 'svg', animated = true }) {
   const { user } = useAuth();
   const admin = isAdmin(user);
   const camaras = state?.camaras || [];
@@ -178,7 +182,7 @@ export default function CamarasView({ state, series, mimicStyle = 'svg' }) {
 
       <div className="grid grid-cols-1 gap-px hair-grid">
         {camaras.map((cam, i) => (
-          <ChamberCard key={i} cam={cam} idx={i} mimicStyle={mimicStyle} />
+          <ChamberCard key={i} cam={cam} idx={i} mimicStyle={mimicStyle} animated={animated} />
         ))}
       </div>
 

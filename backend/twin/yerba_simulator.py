@@ -22,7 +22,10 @@ from collections import deque
 from datetime import datetime, timezone, timedelta
 from typing import Dict, Any, List, Tuple
 
-from .pid import PID
+from .pid import PID, OnOff
+
+# Modos de control por etapa (qué "sistema de control" gobierna la MV)
+CONTROL_MODES = ("manual", "onoff", "pid", "external")
 
 DEFAULT_LIMITS = {
     "temp_min": 10,
@@ -85,10 +88,15 @@ class Zapecado:
         self.falla_motor_tambor = False
         # tau (compat, no usado en modelo físico nuevo)
         self.tau = float(config.get("tau", 90.0))
+        # Sistema de control de esta etapa: manual | onoff | pid | external
+        self.control_mode = str(config.get("control_mode", "manual"))
         # PID interno (manipula velocidad_chip para llegar al SP)
         self.pid = PID(kp=0.15, ki=0.005, kd=0.0,
                        out_min=0.0, out_max=200.0,
                        direct_action=True)
+        # Controlador ON/OFF (bang-bang) sobre velocidad_chip
+        self.onoff = OnOff(sp=(self.temperatura_obj or 420.0), hysteresis=15.0,
+                           out_high=60.0, out_low=0.0, direct_action=True)
         if self.temperatura_obj is not None:
             self.pid.sp = float(self.temperatura_obj)
 
@@ -113,12 +121,22 @@ class Zapecado:
         return float(self.velocidad_chip)
 
     def update(self, dt: float, ambient_temp: float):
-        # PID opcional: ajusta velocidad_chip
-        if self.pid.enabled:
-            self.pid.sp = float(self.temperatura_obj) if self.temperatura_obj is not None else 420.0
+        # Sistema de control: quién ajusta velocidad_chip para llegar al SP
+        sp_t = float(self.temperatura_obj) if self.temperatura_obj is not None else 420.0
+        self.pid.enabled = (self.control_mode == "pid")
+        self.onoff.enabled = (self.control_mode == "onoff")
+        if self.control_mode == "pid":
+            self.pid.sp = sp_t
             out = self.pid.step(self.temperatura, dt)
             if out is not None:
                 self.velocidad_chip = max(0.0, min(200.0, out))
+        elif self.control_mode == "onoff":
+            self.onoff.sp = sp_t
+            out = self.onoff.step(self.temperatura, dt)
+            if out is not None:
+                self.velocidad_chip = max(0.0, min(200.0, out))
+        # manual / external: la MV la fija el operador o el PLC (modo twin);
+        # la física responde a velocidad_chip tal como esté.
         # Balance térmico
         T = self.temperatura
         dT = T - ambient_temp
@@ -172,6 +190,11 @@ class Secado:
         self.pid_t.sp = self.temperatura_obj
         self.pid_h = PID(kp=0.3, ki=0.02, kd=0.0, out_min=0.5, out_max=12.0, direct_action=False)
         self.pid_h.sp = self.humedad_obj
+        # Sistema de control por lazo: Temperatura (calefactor) y Humedad (aire)
+        self.control_mode_t = str(config.get("control_mode_t", "manual"))
+        self.control_mode_h = str(config.get("control_mode_h", "manual"))
+        self.onoff_t = OnOff(sp=self.temperatura_obj, hysteresis=3.0, out_high=100.0, out_low=0.0, direct_action=True)
+        self.onoff_h = OnOff(sp=self.humedad_obj, hysteresis=2.0, out_high=8.0, out_low=0.5, direct_action=False)
 
     def vel_aire_real(self) -> float:
         if not self.estado or self.falla_ventilador:
@@ -184,18 +207,30 @@ class Secado:
         return max(0.0, min(100.0, float(self.posicion_calefactor)))
 
     def update(self, dt: float, ambient_temp: float, ambient_humidity: float):
-        if self.pid_t.enabled:
-            # Si el sp del PID no fue seteado explícitamente, usar el temperatura_obj de la etapa.
-            # Si el sp está fijado != temperatura_obj, respetar el sp del PID.
-            if self.pid_t.sp == 0 or abs(self.pid_t.sp - self.temperatura_obj) < 0.001:
-                self.pid_t.sp = self.temperatura_obj
+        # Lazo Temperatura → calefactor
+        self.pid_t.enabled = (self.control_mode_t == "pid")
+        self.onoff_t.enabled = (self.control_mode_t == "onoff")
+        if self.control_mode_t == "pid":
+            self.pid_t.sp = self.temperatura_obj
             out = self.pid_t.step(self.temperatura, dt)
             if out is not None:
                 self.posicion_calefactor = max(0.0, min(100.0, out))
-        if self.pid_h.enabled:
-            if self.pid_h.sp == 0 or abs(self.pid_h.sp - self.humedad_obj) < 0.001:
-                self.pid_h.sp = self.humedad_obj
+        elif self.control_mode_t == "onoff":
+            self.onoff_t.sp = self.temperatura_obj
+            out = self.onoff_t.step(self.temperatura, dt)
+            if out is not None:
+                self.posicion_calefactor = max(0.0, min(100.0, out))
+        # Lazo Humedad → aire
+        self.pid_h.enabled = (self.control_mode_h == "pid")
+        self.onoff_h.enabled = (self.control_mode_h == "onoff")
+        if self.control_mode_h == "pid":
+            self.pid_h.sp = self.humedad_obj
             out = self.pid_h.step(self.humedad, dt)
+            if out is not None:
+                self.velocidad_aire = max(0.0, min(15.0, out))
+        elif self.control_mode_h == "onoff":
+            self.onoff_h.sp = self.humedad_obj
+            out = self.onoff_h.step(self.humedad, dt)
             if out is not None:
                 self.velocidad_aire = max(0.0, min(15.0, out))
 
@@ -239,8 +274,13 @@ class Canchado:
         self.tau_p = float(config.get("tau_p", 5.0))
         self.falla_motor = False
         self.rodamiento_caliente = False
+        # Sistema de control: manual | onoff | pid | external
+        self.control_mode = str(config.get("control_mode", "manual"))
         # PID opcional: SP grosor → ajusta rpm (acción inversa: más rpm = menos grosor)
         self.pid = PID(kp=-10.0, ki=-0.5, kd=0.0, out_min=0.0, out_max=130.0, direct_action=True)
+        # ON/OFF sobre rpm: acción inversa (más rpm baja el grosor).
+        self.onoff = OnOff(sp=(self.tamano_particula_obj or 4.0), hysteresis=1.0,
+                           out_high=90.0, out_low=30.0, direct_action=False)
 
     def get_setpoint(self) -> float:
         if self.tamano_particula_obj is not None:
@@ -256,11 +296,20 @@ class Canchado:
         return float(self.velocidad_molino)
 
     def update(self, dt: float):
-        if self.pid.enabled and self.tamano_particula_obj is not None:
-            self.pid.sp = float(self.tamano_particula_obj)
-            out = self.pid.step(self.tamano_particula, dt)
-            if out is not None:
-                self.velocidad_molino = max(0.0, min(130.0, out))
+        sp_p = float(self.tamano_particula_obj) if self.tamano_particula_obj is not None else None
+        self.pid.enabled = (self.control_mode == "pid")
+        self.onoff.enabled = (self.control_mode == "onoff")
+        if sp_p is not None:
+            if self.control_mode == "pid":
+                self.pid.sp = sp_p
+                out = self.pid.step(self.tamano_particula, dt)
+                if out is not None:
+                    self.velocidad_molino = max(0.0, min(130.0, out))
+            elif self.control_mode == "onoff":
+                self.onoff.sp = sp_p
+                out = self.onoff.step(self.tamano_particula, dt)
+                if out is not None:
+                    self.velocidad_molino = max(0.0, min(130.0, out))
         if self.falla_motor or not self.estado:
             self.tamano_particula += random.uniform(-0.01, 0.01)
         else:
@@ -323,9 +372,13 @@ class CamaraMaduracion:
         self.lim = limits
         # tau (compat)
         self.tau = float(config.get("tau", limits.get("tau_camera", 600)))
+        # Sistema de control de la cámara: manual | onoff | pid | external
+        self.control_mode = str(config.get("control_mode", "manual"))
         # PID opcional: SP T → manipula vapor_caudal_kgh
         self.pid_t = PID(kp=8.0, ki=0.1, kd=0.0, out_min=0.0, out_max=200.0, direct_action=True)
         self.pid_t.sp = self.temperatura_obj
+        # ON/OFF sobre el vapor (válvula todo-o-nada con histéresis)
+        self.onoff = OnOff(sp=self.temperatura_obj, hysteresis=1.0, out_high=30.0, out_low=0.0, direct_action=True)
 
     def vent_real(self) -> float:
         """Fracción efectiva de ventilación (0..1)."""
@@ -345,13 +398,21 @@ class CamaraMaduracion:
         if self.carga_kg > 0:
             self.tiempo_maduracion += dt / 86400.0
 
-        if self.pid_t.enabled:
+        self.pid_t.enabled = (self.control_mode == "pid")
+        self.onoff.enabled = (self.control_mode == "onoff")
+        if self.control_mode == "pid":
             self.pid_t.sp = self.temperatura_obj
             out = self.pid_t.step(self.temperatura, dt)
             if out is not None:
                 self.vapor_caudal_kgh = max(0.0, min(200.0, out))
                 if out > 0.5:
                     self.vapor_activo = True
+        elif self.control_mode == "onoff":
+            self.onoff.sp = self.temperatura_obj
+            out = self.onoff.step(self.temperatura, dt)
+            if out is not None:
+                self.vapor_caudal_kgh = max(0.0, min(200.0, out))
+                self.vapor_activo = out > 0.5
 
         # Balance térmico
         T = self.temperatura
@@ -498,7 +559,7 @@ class YerbaProcessSimulator:
     def set_zapecado(self, *, velocidad_tambor=None, velocidad_chip=None, estado_alimentacion=None,
                      temperatura_obj=None, tau=None,
                      falla_quemador=None, falla_motor_tambor=None,
-                     pid=None):
+                     pid=None, onoff=None, control_mode=None):
         with self.lock:
             z = self.zapecado
             if velocidad_tambor is not None:
@@ -517,13 +578,21 @@ class YerbaProcessSimulator:
                 z.falla_quemador = bool(falla_quemador)
             if falla_motor_tambor is not None:
                 z.falla_motor_tambor = bool(falla_motor_tambor)
+            if control_mode is not None and control_mode in CONTROL_MODES:
+                z.control_mode = control_mode
+            if onoff is not None and isinstance(onoff, dict):
+                z.onoff.update_params(**onoff)
             if pid is not None and isinstance(pid, dict):
-                z.pid.update_params(**pid)
+                # Compat: activar/desactivar el PID desde el panel viejo mapea al modo de control
+                if "enabled" in pid:
+                    z.control_mode = "pid" if pid["enabled"] else ("manual" if z.control_mode == "pid" else z.control_mode)
+                z.pid.update_params(**{k: v for k, v in pid.items() if k != "enabled"})
 
     def set_secado(self, *, velocidad_aire=None, posicion_calefactor=None, estado=None,
                    temperatura_obj=None, humedad_obj=None, tau_t=None,
                    falla_ventilador=None, falla_serpentin=None,
-                   pid_t=None, pid_h=None):
+                   pid_t=None, pid_h=None, onoff_t=None, onoff_h=None,
+                   control_mode_t=None, control_mode_h=None):
         with self.lock:
             s = self.secado
             if velocidad_aire is not None:
@@ -544,15 +613,27 @@ class YerbaProcessSimulator:
                 s.falla_ventilador = bool(falla_ventilador)
             if falla_serpentin is not None:
                 s.falla_serpentin = bool(falla_serpentin)
+            if control_mode_t is not None and control_mode_t in CONTROL_MODES:
+                s.control_mode_t = control_mode_t
+            if control_mode_h is not None and control_mode_h in CONTROL_MODES:
+                s.control_mode_h = control_mode_h
+            if onoff_t is not None and isinstance(onoff_t, dict):
+                s.onoff_t.update_params(**onoff_t)
+            if onoff_h is not None and isinstance(onoff_h, dict):
+                s.onoff_h.update_params(**onoff_h)
             if pid_t is not None and isinstance(pid_t, dict):
-                s.pid_t.update_params(**pid_t)
+                if "enabled" in pid_t:
+                    s.control_mode_t = "pid" if pid_t["enabled"] else ("manual" if s.control_mode_t == "pid" else s.control_mode_t)
+                s.pid_t.update_params(**{k: v for k, v in pid_t.items() if k != "enabled"})
             if pid_h is not None and isinstance(pid_h, dict):
-                s.pid_h.update_params(**pid_h)
+                if "enabled" in pid_h:
+                    s.control_mode_h = "pid" if pid_h["enabled"] else ("manual" if s.control_mode_h == "pid" else s.control_mode_h)
+                s.pid_h.update_params(**{k: v for k, v in pid_h.items() if k != "enabled"})
 
     def set_canchado(self, *, velocidad_molino=None, estado=None,
                      tamano_particula_obj=None, tau_p=None,
                      falla_motor=None, rodamiento_caliente=None,
-                     pid=None):
+                     pid=None, onoff=None, control_mode=None):
         with self.lock:
             c = self.canchado
             if velocidad_molino is not None:
@@ -569,8 +650,14 @@ class YerbaProcessSimulator:
                 c.falla_motor = bool(falla_motor)
             if rodamiento_caliente is not None:
                 c.rodamiento_caliente = bool(rodamiento_caliente)
+            if control_mode is not None and control_mode in CONTROL_MODES:
+                c.control_mode = control_mode
+            if onoff is not None and isinstance(onoff, dict):
+                c.onoff.update_params(**onoff)
             if pid is not None and isinstance(pid, dict):
-                c.pid.update_params(**pid)
+                if "enabled" in pid:
+                    c.control_mode = "pid" if pid["enabled"] else ("manual" if c.control_mode == "pid" else c.control_mode)
+                c.pid.update_params(**{k: v for k, v in pid.items() if k != "enabled"})
 
     def set_camara(self, idx: int, *, carga_kg=None, ventilador=None, vent_pos=None,
                    temperatura_obj=None, humedad_obj=None, co2_obj=None,
@@ -578,7 +665,7 @@ class YerbaProcessSimulator:
                    vapor_setpoint_temp=None, vapor_setpoint_hum=None,
                    tau=None,
                    falla_ventilador=None, fuga_vapor=None, puerta_abierta=None,
-                   pid_t=None):
+                   pid_t=None, onoff=None, control_mode=None):
         with self.lock:
             if idx < 0 or idx >= len(self.camaras):
                 return
@@ -600,8 +687,14 @@ class YerbaProcessSimulator:
             if falla_ventilador is not None: cam.falla_ventilador = bool(falla_ventilador)
             if fuga_vapor is not None: cam.fuga_vapor = bool(fuga_vapor)
             if puerta_abierta is not None: cam.puerta_abierta = bool(puerta_abierta)
+            if control_mode is not None and control_mode in CONTROL_MODES:
+                cam.control_mode = control_mode
+            if onoff is not None and isinstance(onoff, dict):
+                cam.onoff.update_params(**onoff)
             if pid_t is not None and isinstance(pid_t, dict):
-                cam.pid_t.update_params(**pid_t)
+                if "enabled" in pid_t:
+                    cam.control_mode = "pid" if pid_t["enabled"] else ("manual" if cam.control_mode == "pid" else cam.control_mode)
+                cam.pid_t.update_params(**{k: v for k, v in pid_t.items() if k != "enabled"})
 
     MAX_CAMARAS = 12
 
@@ -758,7 +851,9 @@ class YerbaProcessSimulator:
                 "velocidad_chip": z.velocidad_chip,
                 "estado_alimentacion": z.estado_alimentacion,
                 "tau": z.tau,
+                "control_mode": z.control_mode,
                 "pid": z.pid.to_dict(),
+                "onoff": z.onoff.to_dict(),
                 "faults": {
                     "falla_quemador": z.falla_quemador,
                     "falla_motor_tambor": z.falla_motor_tambor,
@@ -781,8 +876,12 @@ class YerbaProcessSimulator:
                 "velocidad_aire_real": round(s.vel_aire_real(), 2),
                 "estado": s.estado,
                 "tau_t": s.tau_t,
+                "control_mode_t": s.control_mode_t,
+                "control_mode_h": s.control_mode_h,
                 "pid_t": s.pid_t.to_dict(),
                 "pid_h": s.pid_h.to_dict(),
+                "onoff_t": s.onoff_t.to_dict(),
+                "onoff_h": s.onoff_h.to_dict(),
                 "faults": {
                     "falla_ventilador": s.falla_ventilador,
                     "falla_serpentin": s.falla_serpentin,
@@ -803,7 +902,9 @@ class YerbaProcessSimulator:
                 "tamano_particula_sp_efectivo": round(c.get_setpoint(), 2),
                 "estado": c.estado,
                 "tau_p": c.tau_p,
+                "control_mode": c.control_mode,
                 "pid": c.pid.to_dict(),
+                "onoff": c.onoff.to_dict(),
                 "faults": {
                     "falla_motor": c.falla_motor,
                     "rodamiento_caliente": c.rodamiento_caliente,
@@ -830,7 +931,9 @@ class YerbaProcessSimulator:
                     "vent_pos": round(cam.vent_pos, 1),
                     "ventilador_real": round(cam.vent_real() * 100, 1),
                     "vapor_real_kgh": round(cam.vapor_real_kgh(), 2),
+                    "control_mode": cam.control_mode,
                     "pid_t": cam.pid_t.to_dict(),
+                    "onoff": cam.onoff.to_dict(),
                     "temperatura_obj": cam.temperatura_obj,
                     "humedad_obj": cam.humedad_obj,
                     "co2_obj": cam.co2_obj,

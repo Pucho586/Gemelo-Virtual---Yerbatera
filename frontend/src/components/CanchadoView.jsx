@@ -4,12 +4,15 @@ import { CanchadoChart, flatten } from './Charts';
 import { CanchadoMimic, CanchadoPid } from './Mimics';
 import StageBlock from './StageBlock';
 import FaultPanel from './FaultPanel';
-import PidPanel from './PidPanel';
+import ControlSystemPanel from './ControlSystemPanel';
 import { useLocalSync } from '../lib/useLocalSync';
+import { useAuth, isAdmin } from '../lib/auth';
 import { api } from '../lib/api';
 import { Cube } from '@phosphor-icons/react';
 
-export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
+export default function CanchadoView({ state, series, mimicStyle = 'svg', animated = true }) {
+  const { user } = useAuth();
+  const admin = isAdmin(user);
   const c = state?.canchado;
   const faults = c?.faults || {};
   const [rpm, setRpm] = useLocalSync(c?.velocidad_molino ?? 60);
@@ -31,7 +34,7 @@ export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-px hair-grid">
       <Card className="lg:col-span-2 p-0" testid="canchado-mimic-card">
         <CardHeader title="Canchado · Mímico" subtitle="rpm REAL (no SP) — si apagás el molino se ve detenido" />
-        <div className="p-4">{mimicStyle === 'pid' ? <CanchadoPid data={c} /> : <CanchadoMimic data={c} />}</div>
+        <div className="p-4">{mimicStyle === 'pid' ? <CanchadoPid data={c} /> : <CanchadoMimic data={c} animated={animated} />}</div>
       </Card>
 
       <Card className="p-6" testid="canchado-controls-card">
@@ -80,12 +83,13 @@ export default function CanchadoView({ state, series, mimicStyle = 'svg' }) {
       </div>
 
       <div className="lg:col-span-3">
-        <PidPanel
-          title="PID Canchado · ajusta rpm"
-          pid={c?.pid}
-          manipulada="vel. molino (rpm)"
-          onApply={(patch) => apply({ pid: patch })}
-          testidBase="can-pid"
+        <ControlSystemPanel
+          stageLabel="Canchado"
+          mvLabel="velocidad del molino (rpm)"
+          spLabel="grosor" spValue={c?.tamano_particula_obj} spUnit="mm"
+          control_mode={c?.control_mode}
+          pid={c?.pid || {}} onoff={c?.onoff || {}}
+          onApply={apply} admin={admin} testidBase="can-ctrl"
         />
       </div>
 
