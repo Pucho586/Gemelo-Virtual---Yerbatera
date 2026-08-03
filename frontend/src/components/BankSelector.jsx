@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { api, getBank, setBank } from '../lib/api';
-import { useAuth, isAdmin } from '../lib/auth';
+import { useAuth, isDocente } from '../lib/auth';
 import { Desktop, Plus } from '@phosphor-icons/react';
 
 /**
@@ -10,7 +10,7 @@ import { Desktop, Plus } from '@phosphor-icons/react';
  */
 export default function BankSelector() {
   const { user } = useAuth();
-  const admin = isAdmin(user);
+  const admin = isDocente(user);
   const [banks, setBanks] = useState([]);
   const [current, setCurrent] = useState(getBank());
   const [creating, setCreating] = useState(false);

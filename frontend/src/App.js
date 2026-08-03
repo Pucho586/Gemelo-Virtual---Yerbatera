@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import './App.css';
 import { useLiveState } from './lib/useLiveState';
 import { api } from './lib/api';
-import { AuthProvider, useAuth, isAdmin } from './lib/auth';
+import { AuthProvider, useAuth, isAdmin, isDocente } from './lib/auth';
 import Login from './components/Login';
 import Dashboard from './components/Dashboard';
 import ZapecadoView from './components/ZapecadoView';
@@ -40,7 +40,7 @@ const TABS = [
   { id: 'i40', label: 'Industria 4.0', Icon: Plugs, role: 'any' },
   { id: 'fase4', label: 'Replay & What-if', Icon: Flask, role: 'any' },
   { id: 'ia', label: 'IA · Gemini', Icon: Sparkle, role: 'any' },
-  { id: 'docente', label: 'Docente', Icon: GraduationCap, role: 'admin' },
+  { id: 'docente', label: 'Docente', Icon: GraduationCap, role: 'docente' },
   { id: 'config', label: 'Configuración', Icon: Gear, role: 'admin' },
 ];
 const TAB_META = Object.fromEntries(TABS.map(t => [t.id, t]));
@@ -138,7 +138,13 @@ function AuthedApp() {
     });
   };
 
-  const canSee = (id) => { const t = TAB_META[id]; return t && (t.role === 'any' || isAdmin(user)); };
+  const canSee = (id) => {
+    const t = TAB_META[id];
+    if (!t) return false;
+    if (t.role === 'any') return true;
+    if (t.role === 'docente') return isDocente(user);
+    return isAdmin(user);
+  };
   const visibleGroups = GROUPS
     .map(g => ({ ...g, tabs: g.tabs.filter(canSee) }))
     .filter(g => g.tabs.length > 0);
@@ -254,7 +260,7 @@ function AuthedApp() {
         <div style={{ display: tab === 'i40' ? 'block' : 'none' }}><Industria40View /></div>
         <div style={{ display: tab === 'fase4' ? 'block' : 'none' }}><Fase4View /></div>
         <div style={{ display: tab === 'ia' ? 'block' : 'none' }}><AIPanel /></div>
-        {isAdmin(user) && (
+        {isDocente(user) && (
           <div style={{ display: tab === 'docente' ? 'block' : 'none' }}><DocenteView /></div>
         )}
         {isAdmin(user) && (

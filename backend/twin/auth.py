@@ -1,4 +1,4 @@
-"""Autenticación local con JWT + bcrypt + roles (admin / operario)."""
+"""Autenticación local con JWT + bcrypt + roles (admin / docente / operario)."""
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
@@ -94,8 +94,12 @@ def require_role(role: str):
 
 
 # --------- Seeding ---------
+# La contraseña inicial del docente puede fijarse en backend/.env (DOCENTE_PASSWORD).
+# Cambiala desde la app apenas ingreses (Salir → login docente → cambiar contraseña).
 DEFAULT_USERS = [
     {"username": "admin", "password": "admin", "role": "admin", "display": "Administrador"},
+    {"username": "docente", "password": os.environ.get("DOCENTE_PASSWORD", "docente"),
+     "role": "docente", "display": "Docente"},
     {"username": "operario", "password": "operario", "role": "operator", "display": "Operario"},
 ]
 

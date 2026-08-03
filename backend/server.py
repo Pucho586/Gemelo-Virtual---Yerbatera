@@ -139,6 +139,14 @@ async def admin_only(request: Request) -> Dict[str, Any]:
     return user
 
 
+async def docente_only(request: Request) -> Dict[str, Any]:
+    """Docente o admin: gestión de bancos de alumnos (panel del docente)."""
+    user = await get_current_user(request, db)
+    if user.get("role") not in ("admin", "docente"):
+        raise HTTPException(403, "Requiere rol docente")
+    return user
+
+
 # ---------- Schemas ----------
 class LoginBody(BaseModel):
     username: str
@@ -1435,7 +1443,7 @@ async def list_banks(user=Depends(current_user_dep)):
 
 
 @api.post("/banks")
-async def create_bank(body: BankCreateBody, request: Request, user=Depends(admin_only)):
+async def create_bank(body: BankCreateBody, request: Request, user=Depends(docente_only)):
     mgr = get_manager()
     try:
         bank = await mgr.create_async(name=body.name, student=body.student, bank_id=body.bank_id)
@@ -1446,7 +1454,7 @@ async def create_bank(body: BankCreateBody, request: Request, user=Depends(admin
 
 
 @api.delete("/banks/{bank_id}")
-async def delete_bank(bank_id: str, request: Request, user=Depends(admin_only)):
+async def delete_bank(bank_id: str, request: Request, user=Depends(docente_only)):
     mgr = get_manager()
     try:
         mgr.delete(bank_id)
@@ -1464,7 +1472,7 @@ async def bank_state(bank_id: str, user=Depends(current_user_dep)):
 
 
 @api.post("/banks/{bank_id}/reset")
-async def bank_reset(bank_id: str, request: Request, user=Depends(admin_only)):
+async def bank_reset(bank_id: str, request: Request, user=Depends(docente_only)):
     bank = _bank_or_404(bank_id)
     bank.reset()
     await audit_service.log(user, "bank.reset", {"bank_id": bank_id}, request)
@@ -1472,7 +1480,7 @@ async def bank_reset(bank_id: str, request: Request, user=Depends(admin_only)):
 
 
 @api.post("/banks/{bank_id}/freeze")
-async def bank_freeze(bank_id: str, body: BankFreezeBody, request: Request, user=Depends(admin_only)):
+async def bank_freeze(bank_id: str, body: BankFreezeBody, request: Request, user=Depends(docente_only)):
     bank = _bank_or_404(bank_id)
     bank.set_frozen(body.frozen)
     await audit_service.log(user, "bank.freeze", {"bank_id": bank_id, "frozen": body.frozen}, request)
@@ -1480,7 +1488,7 @@ async def bank_freeze(bank_id: str, body: BankFreezeBody, request: Request, user
 
 
 @api.post("/banks/{bank_id}/consigna")
-async def bank_consigna(bank_id: str, body: BankConsignaBody, request: Request, user=Depends(admin_only)):
+async def bank_consigna(bank_id: str, body: BankConsignaBody, request: Request, user=Depends(docente_only)):
     bank = _bank_or_404(bank_id)
     bank.set_consigna(body.model_dump(exclude_none=True))
     await audit_service.log(user, "bank.consigna", {"bank_id": bank_id}, request)
@@ -1488,7 +1496,7 @@ async def bank_consigna(bank_id: str, body: BankConsignaBody, request: Request, 
 
 
 @api.post("/banks/{bank_id}/inject")
-async def bank_inject(bank_id: str, body: BankInjectBody, request: Request, user=Depends(admin_only)):
+async def bank_inject(bank_id: str, body: BankInjectBody, request: Request, user=Depends(docente_only)):
     """El docente inyecta fallas / cambia parámetros en el banco de un alumno."""
     bank = _bank_or_404(bank_id)
     sim = bank.simulator

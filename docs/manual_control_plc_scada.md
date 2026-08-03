@@ -241,7 +241,16 @@ sobre ese banco. Su PLC se conecta al puerto Modbus/OPC correspondiente.
 
 ### 7.3. Panel del docente
 
-En **Integración → Docente** (requiere rol admin) el docente tiene un panel con
+El docente tiene su **propio acceso con contraseña**, separado del de los alumnos:
+
+- **Usuario**: `docente` · **Contraseña inicial**: `docente` (o la fijada en `backend/.env`
+  con `DOCENTE_PASSWORD=...`). **Cambiala apenas ingreses** desde la app.
+- Los alumnos usan el usuario `operario` (u otros que cree el admin) y **no ven** el
+  panel Docente ni pueden crear/reiniciar/congelar bancos — el backend lo rechaza
+  aunque conozcan la URL.
+- El usuario `admin` también puede todo lo del docente.
+
+Con ese acceso, en **Integración → Docente** el docente tiene un panel con
 **todos los bancos en vivo**. Por cada banco puede:
 
 - **Monitorear** el proceso en tiempo real (T de zapecado, T/HR de secado, partícula de canchado, modo, control activo, cámaras).
