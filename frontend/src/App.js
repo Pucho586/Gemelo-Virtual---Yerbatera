@@ -15,6 +15,8 @@ import RecetasView from './components/RecetasView';
 import LotesView from './components/LotesView';
 import Industria40View from './components/Industria40View';
 import ProtocolsView from './components/ProtocolsView';
+import DocenteView from './components/DocenteView';
+import BankSelector from './components/BankSelector';
 import OperacionesView from './components/OperacionesView';
 import Fase4View from './components/Fase4View';
 import MassFlowView from './components/MassFlowView';
@@ -38,6 +40,7 @@ const TABS = [
   { id: 'i40', label: 'Industria 4.0', Icon: Plugs, role: 'any' },
   { id: 'fase4', label: 'Replay & What-if', Icon: Flask, role: 'any' },
   { id: 'ia', label: 'IA · Gemini', Icon: Sparkle, role: 'any' },
+  { id: 'docente', label: 'Docente', Icon: GraduationCap, role: 'admin' },
   { id: 'config', label: 'Configuración', Icon: Gear, role: 'admin' },
 ];
 const TAB_META = Object.fromEntries(TABS.map(t => [t.id, t]));
@@ -47,7 +50,7 @@ const GROUPS = [
   { id: 'operacion', label: 'Operación', Icon: House, tabs: ['dashboard', 'massflow', 'recetas', 'lotes'] },
   { id: 'proceso', label: 'Proceso', Icon: Fire, tabs: ['zapecado', 'secado', 'canchado', 'camaras'] },
   { id: 'analisis', label: 'Análisis', Icon: ChartLineUp, tabs: ['ops', 'fase4', 'ia'] },
-  { id: 'integracion', label: 'Integración', Icon: Plugs, tabs: ['protocolos', 'i40', 'config'] },
+  { id: 'integracion', label: 'Integración', Icon: Plugs, tabs: ['protocolos', 'i40', 'docente', 'config'] },
 ];
 
 function ConnDot({ on, disabled, label, testid }) {
@@ -174,6 +177,7 @@ function AuthedApp() {
               <ConnDot on={status?.mqtt?.running} disabled={status?.mqtt?.disabled} label="MQTT" testid="mqtt-badge" />
               <ConnDot on={status?.opcua?.running} disabled={status?.opcua?.disabled} label="OPC" testid="opcua-badge" />
             </div>
+            <BankSelector />
             <WeatherControl ambient={state?.ambient} weatherStatus={status?.weather} />
             {activeAlarms > 0 && (
               <button onClick={() => setTab('ops')} className="inline-flex items-center gap-1 px-2 py-1 text-xs font-mono uppercase tracking-wider border bg-red-500/15 text-red-300 border-red-500/40 hover:bg-red-500/25 transition-colors" data-testid="alarms-badge-header">
@@ -250,6 +254,9 @@ function AuthedApp() {
         <div style={{ display: tab === 'i40' ? 'block' : 'none' }}><Industria40View /></div>
         <div style={{ display: tab === 'fase4' ? 'block' : 'none' }}><Fase4View /></div>
         <div style={{ display: tab === 'ia' ? 'block' : 'none' }}><AIPanel /></div>
+        {isAdmin(user) && (
+          <div style={{ display: tab === 'docente' ? 'block' : 'none' }}><DocenteView /></div>
+        )}
         {isAdmin(user) && (
           <div style={{ display: tab === 'config' ? 'block' : 'none' }}><ConfigView status={status} /></div>
         )}

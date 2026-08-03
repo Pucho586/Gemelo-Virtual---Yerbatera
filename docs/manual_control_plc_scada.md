@@ -215,7 +215,54 @@ Si en vez de programar el PID en el PLC querés compararlo con el PID interno de
 
 ---
 
-## 7. Referencias
+## 7. Uso multiusuario: bancos de trabajo y panel del docente
+
+Para que **varios alumnos trabajen a la vez sin pisarse**, el gemelo soporta
+**bancos de trabajo**: cada banco es una **planta virtual independiente**, con su
+propio simulador y sus propios servidores industriales en **puertos desplazados**.
+
+### 7.1. ¿Cómo se separan los puertos?
+
+| Banco | Modbus TCP | OPC UA | Prefijo MQTT |
+|-------|-----------|--------|--------------|
+| Principal (default) | `5020` | `4840` | `yerba/…` |
+| Banco 1 (offset 1) | `5021` | `4841` | `yerba/b1/…` |
+| Banco 2 (offset 2) | `5022` | `4842` | `yerba/b2/…` |
+| Banco *n* | `5020 + n` | `4840 + n` | `yerba/b<id>/…` |
+
+- **Modbus / OPC UA**: cada banco escucha en **su propio puerto** de la misma IP del servidor. El PLC/SCADA de cada alumno apunta al puerto de **su** banco (misma dirección `40001/00001` y unit ids que en §2.2 — solo cambia el puerto).
+- **MQTT**: un solo broker compartido, separado por **prefijo de topic**. El banco 1 publica en `yerba/b1/zapecado` y escucha comandos en `yerba/b1/cmd/#`.
+
+### 7.2. El alumno elige su banco
+
+En el header de la app hay un **selector de banco** (ícono de monitor 🖥). El alumno
+elige el banco que le asignaron y **toda su sesión** (web + WebSocket + REST) opera
+sobre ese banco. Su PLC se conecta al puerto Modbus/OPC correspondiente.
+
+### 7.3. Panel del docente
+
+En **Integración → Docente** (requiere rol admin) el docente tiene un panel con
+**todos los bancos en vivo**. Por cada banco puede:
+
+- **Monitorear** el proceso en tiempo real (T de zapecado, T/HR de secado, partícula de canchado, modo, control activo, cámaras).
+- **Crear / eliminar** bancos y asignarles un alumno.
+- **Inyectar fallas** (quemador, ventilador, serpentín, motor, rodamiento, etc.) para que el alumno las diagnostique y resuelva.
+- **Congelar / reanudar** la simulación de un banco (pausa la física sin perder el estado).
+- **Reiniciar** el banco a su estado inicial.
+- **Asignar una consigna** (título + criterio) que el alumno ve como objetivo.
+
+> **Flujo típico de clase**: el docente crea un banco por alumno → le asigna una consigna
+> (ej. "llevar el zapecado a 450 °C con un PID en el PLC") → el alumno selecciona su banco,
+> programa su PLC contra el puerto Modbus del banco y arma el SCADA → el docente monitorea,
+> inyecta una falla sorpresa y observa cómo el alumno la resuelve.
+
+> **Nota técnica**: el banco **Principal** conserva los puertos y la persistencia históricos.
+> Los bancos adicionales viven en memoria (no persisten a disco) y se pierden si se reinicia
+> el backend; están pensados para la sesión de clase.
+
+---
+
+## 8. Referencias
 
 - `01_instructivo_ejecucion.md` — cómo levantar el sistema.
 - `manual_gemelo_virtual.md` — los 4 modos del gemelo (simulator/shadow/twin/replay) y uso en paralelo con MQTT/Modbus/OPC UA.

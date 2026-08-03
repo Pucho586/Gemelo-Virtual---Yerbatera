@@ -20,6 +20,18 @@ export const setAuthToken = (token) => {
 const stored = (() => { try { return localStorage.getItem('yerba_token'); } catch (e) { return null; } })();
 if (stored) setAuthToken(stored);
 
+// ---- Banco activo (multiusuario). Cada alumno opera sobre su propio banco. ----
+export const getBank = () => {
+  try { return localStorage.getItem('yerba_bank') || 'default'; } catch (e) { return 'default'; }
+};
+export const setBank = (bankId) => {
+  const id = bankId || 'default';
+  try { localStorage.setItem('yerba_bank', id); } catch (e) { /* ignore */ }
+  http.defaults.headers.common['X-Bank-Id'] = id;
+};
+// Inicializa el header con el banco guardado
+setBank(getBank());
+
 export const api = {
   // Auth
   login: (body) => http.post('/auth/login', body).then(r => r.data),
@@ -126,10 +138,19 @@ export const api = {
   listDataFiles: () => http.get('/data/files').then(r => r.data),
   downloadCsvUrl: (name) => `${API}/data/download/${encodeURIComponent(name)}`,
   excelUrl: (name) => `${API}/data/excel${name ? `?name=${encodeURIComponent(name)}` : ''}`,
+  // Bancos (multiusuario / docente)
+  listBanks: () => http.get('/banks').then(r => r.data),
+  createBank: (body) => http.post('/banks', body).then(r => r.data),
+  deleteBank: (id) => http.delete(`/banks/${id}`).then(r => r.data),
+  bankState: (id) => http.get(`/banks/${id}/state`).then(r => r.data),
+  bankReset: (id) => http.post(`/banks/${id}/reset`).then(r => r.data),
+  bankFreeze: (id, frozen) => http.post(`/banks/${id}/freeze`, { frozen }).then(r => r.data),
+  bankConsigna: (id, body) => http.post(`/banks/${id}/consigna`, body).then(r => r.data),
+  bankInject: (id, body) => http.post(`/banks/${id}/inject`, body).then(r => r.data),
 };
 
-// WebSocket URL builder
+// WebSocket URL builder (incluye el banco activo)
 export const wsUrl = () => {
   const base = BACKEND_URL.replace(/^http/, 'ws');
-  return `${base}/api/ws`;
+  return `${base}/api/ws?bank=${encodeURIComponent(getBank())}`;
 };
